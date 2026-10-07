@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "OpenAirTV-v0.1-functional-source.zip"
+      - "OpenAirTV-v0.1.2-UI-integrated-source.zip"
       - ".github/workflows/build-apk.yml"
 
 permissions:
@@ -52,7 +52,7 @@ jobs:
 
       - name: Extract receiver source
         run: |
-          unzip -q OpenAirTV-v0.1-functional-source.zip -d build-src
+          unzip -q OpenAirTV-v0.1.2-UI-integrated-source.zip -d build-src
           test -f build-src/android-airplay-server/gradlew
           test -f build-src/android-airplay-server/app/src/main/AndroidManifest.xml
           chmod +x build-src/android-airplay-server/gradlew
@@ -78,13 +78,13 @@ jobs:
       - name: Verify APK
         run: |
           test -f build-src/android-airplay-server/app/build/outputs/apk/debug/app-debug.apk
-          cp build-src/android-airplay-server/app/build/outputs/apk/debug/app-debug.apk OpenAirTV-AndroidTV11-v0.1.apk
-          ls -lh OpenAirTV-AndroidTV11-v0.1.apk
+          cp build-src/android-airplay-server/app/build/outputs/apk/debug/app-debug.apk OpenAirTV-AndroidTV11-v0.1.2.apk
+          ls -lh OpenAirTV-AndroidTV11-v0.1.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OpenAirTV-AndroidTV11-v0.1
-          path: OpenAirTV-AndroidTV11-v0.1.apk
+          name: OpenAirTV-AndroidTV11-v0.1.2
+          path: OpenAirTV-AndroidTV11-v0.1.2.apk
           if-no-files-found: error
           retention-days: 30
