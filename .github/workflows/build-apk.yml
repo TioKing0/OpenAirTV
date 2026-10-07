@@ -55,6 +55,10 @@ jobs:
           unzip -q OpenAirTV-v0.1-functional-source.zip -d build-src
           test -f build-src/android-airplay-server/gradlew
           test -f build-src/android-airplay-server/app/src/main/AndroidManifest.xml
+          chmod +x build-src/android-airplay-server/gradlew
+          chmod +x build-src/android-airplay-server/app/src/main/cpp/third_party/ffmpeg/configure
+          find build-src/android-airplay-server/app/src/main/cpp/third_party/ffmpeg -type f \( -name "*.sh" -o -path "*/configure" \) -exec chmod +x {} \;
+          find build-src/android-airplay-server/app/src/main/cpp/third_party/UxPlay -type f -name "*.sh" -exec chmod +x {} \;
 
       - name: Restore local UxPlay git baseline for patch task
         working-directory: build-src/android-airplay-server/app/src/main/cpp/third_party/UxPlay
