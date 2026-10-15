@@ -38,3 +38,15 @@ A versão 0.2.0 não inclui filmes de demonstração ou itens fictícios. Catál
 ## Assinatura para atualizações permanentes
 
 O workflow de Android TV publica um APK debug de avaliação. Para produzir APKs comerciais que atualizam por cima da instalação, configure uma única chave keystore e os secrets SHOCK_TV_KEYSTORE_B64, SHOCK_TV_STORE_PASSWORD, SHOCK_TV_KEY_ALIAS e SHOCK_TV_KEY_PASSWORD. Não envie o arquivo JKS para o GitHub. O workflow publicará então um artefato SIGNED-RELEASE com ID de pacote br.com.shocktv e versionCode crescente. APKs debug não garantem atualização sem reinstalação.
+
+
+## V0.3.0 — Interface para TV (revisão do vídeo de 15/10)
+- Menu lateral com Início, Filmes, Séries, Minha lista, Busca e Fontes.
+- Destaque cinematográfico alimentado exclusivamente por metadados reais retornados pelos addons; nenhuma imagem ou vídeo fictício.
+- Catálogos normalizados por tipo/ID, removendo duplicações repetidas do Cinemeta e agrupando filmes e séries com seções de gênero quando existe metadado.
+- Cards maiores, com borda e ampliação de foco para o controle remoto e páginas de detalhes com ações úteis de reprodução, curtidos, histórico e assistir mais tarde.
+- Sem filas vazias no início; as áreas pessoais surgem quando o usuário realmente tem dados.
+- Posters carregados com amostragem reduzida, limite por arquivo e cache LRU de memória para TVs com pouca RAM.
+- Identificador br.com.shocktv, dados locais e lógica do player preservados. Testes de navegação em TV real ainda necessários.
+
+Referências conceituais: https://github.com/halilozel1903/compose-tv-rails , https://github.com/azad25/homeflix-tv-app e https://developer.android.com/training/tv/playback/compose/lists . Nenhuma marca, asset ou código proprietário da Netflix foi incorporado.

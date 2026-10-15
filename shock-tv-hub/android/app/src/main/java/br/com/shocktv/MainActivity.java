@@ -403,7 +403,7 @@ public final class MainActivity extends Activity {
             String[] words={"action","comedy","drama","thriller","horror","animation","sci-fi","documentary","romance"};
             for(int i=0;i<genres.length;i++){
                 String term=words[i];
-                addRowFrom(genres[i],matching(m->type.test(m)&&hasGenre(m,term)),shown);
+                addRowFrom(genres[i],matching(m->type.matches(m)&&hasGenre(m,term)),shown);
             }
             addRowFrom("Outros títulos",matching(type),shown);
         }else{
