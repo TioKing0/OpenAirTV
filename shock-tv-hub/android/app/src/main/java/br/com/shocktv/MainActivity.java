@@ -295,84 +295,160 @@ public final class MainActivity extends Activity {
                 if(which==0){message("Cinemeta é a fonte de metadados padrão.");return;}
                 new AlertDialog.Builder(this).setTitle("Remover esta fonte?")
                     .setMessage(names[which]).setNegativeButton("Cancelar",null)
-                    .setPositiveButton("Remover",(dd,w)->{sources.remove(names[which]);saveSources();render();for(String s:sources)loadSource(s);}).show();
+                    .setPositiveButton("Remover",(dd,w)->{sources.remove(names[which]);saveSources();knownItems.clear();render();for(String s:sources)loadSource(s);}).show();
             }).setPositiveButton("Adicionar",(d,w)->addSourceDialog()).setNegativeButton("Fechar",null).show();
     }
 
     private void loadSource(String manifestUrl){
         pool.execute(()->{
-            try {
+            try{
                 JSONObject manifest=getJson(manifestUrl);
                 JSONArray catalogs=manifest.optJSONArray("catalogs");
                 if(catalogs==null)return;
-                int loaded=0;
                 String base=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
-                for(int i=0;i<catalogs.length()&&loaded<4;i++){
-                    JSONObject cat=catalogs.optJSONObject(i);if(cat==null)continue;
-                    String type=cat.optString("type"),id=cat.optString("id");
+                int loaded=0;
+                for(int i=0;i<catalogs.length()&&loaded<7;i++){
+                    JSONObject catalog=catalogs.optJSONObject(i);
+                    if(catalog==null)continue;
+                    String type=catalog.optString("type"),catalogId=catalog.optString("id");
                     if(!("movie".equals(type)||"series".equals(type)||"tv".equals(type)||"channel".equals(type)))continue;
-                    if(!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
+                    if(!catalogId.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
                     try{
-                        String endpoint=base+"catalog/"+type+"/"+id+".json";
-                        JSONObject resp=getJson(endpoint);
-                        JSONArray metas=resp.optJSONArray("metas");
+                        JSONObject response=getJson(base+"catalog/"+type+"/"+catalogId+".json");
+                        JSONArray metas=response.optJSONArray("metas");
                         if(metas==null||metas.length()==0)continue;
-                        final String section=manifest.optString("name","Addon")+" • "+cat.optString("name",type);
-                        ArrayList<Media> found=new ArrayList<>();
-                        for(int j=0;j<metas.length()&&j<18;j++){
-                            JSONObject m=metas.optJSONObject(j);if(m==null)continue;
-                            Media media=new Media();
-                            media.name=m.optString("name","Sem título");media.id=m.optString("id","");
-                            media.type=m.optString("type",type);
-                            media.poster=m.optString("poster","");
-                            media.description=m.optString("description","Metadados do addon: "+manifest.optString("name"));
-                            media.source=base;found.add(media);
+                        ArrayList<Media> incoming=new ArrayList<>();
+                        for(int j=0;j<metas.length()&&j<35;j++){
+                            JSONObject meta=metas.optJSONObject(j);if(meta==null)continue;
+                            String id=meta.optString("id","");
+                            if(id.isEmpty())continue;
+                            Media m=new Media();
+                            m.name=meta.optString("name","Sem título");m.id=id;
+                            m.type=meta.optString("type",type);
+                            m.poster=meta.optString("poster","");
+                            m.description=meta.optString("description","");
+                            m.source=base;m.origin=manifest.optString("name","Addon");
+                            m.catalogId=catalogId;
+                            JSONArray genres=meta.optJSONArray("genres");
+                            if(genres!=null)for(int g=0;g<genres.length();g++){
+                                if(g>0)m.genre+=",";
+                                m.genre+=genres.optString(g,"");
+                            }
+                            incoming.add(m);
                         }
                         loaded++;
                         runOnUiThread(()->{
-                            for(Media newItem:found){
-                                boolean exists=false;
-                                for(Media current:knownItems)if(current.id.equals(newItem.id)&&current.type.equals(newItem.type)){exists=true;break;}
-                                if(!exists)knownItems.add(newItem);
+                            // Stable metadata identity across addons and category results.
+                            for(Media candidate:incoming){
+                                Media prior=null;
+                                for(Media existing:knownItems){
+                                    if(existing.id.equals(candidate.id)&&existing.type.equals(candidate.type)){
+                                        prior=existing;break;
+                                    }
+                                }
+                                if(prior==null)knownItems.add(candidate);
+                                else{
+                                    if(prior.poster.isEmpty()&&!candidate.poster.isEmpty())prior.poster=candidate.poster;
+                                    if(prior.genre.isEmpty()&&!candidate.genre.isEmpty())prior.genre=candidate.genre;
+                                    if(prior.description.isEmpty()&&!candidate.description.isEmpty())prior.description=candidate.description;
+                                }
                             }
-                            addCatalog(section,found);
+                            scheduleRefresh();
                         });
                     }catch(Exception ignored){}
                 }
-                runOnUiThread(()->subtitle.setText("CATÁLOGOS DISPONÍVEIS • "+sources.size()+" FONTE(S)"));
-            } catch(Exception ex){runOnUiThread(()->subtitle.setText("Alguns addons não responderam. Verifique a rede ou as fontes."));}
+            }catch(Exception ex){
+                runOnUiThread(()->Toast.makeText(this,"Algumas fontes não responderam",Toast.LENGTH_SHORT).show());
+            }
         });
     }
+    private String identity(Media item){return item.type+"|"+item.id;}
+    private boolean isSeries(Media m){return "series".equals(m.type);}
+    private boolean isFilm(Media m){return "movie".equals(m.type);}
+    private boolean isChannel(Media m){return "tv".equals(m.type)||"channel".equals(m.type);}
+    private boolean hasGenre(Media m,String part){
+        return m.genre!=null&&m.genre.toLowerCase(java.util.Locale.ROOT)
+              .contains(part.toLowerCase(java.util.Locale.ROOT));
+    }
+    private void addRowFrom(String title,ArrayList<Media> inputs,Set<String> displayed){
+        if(inputs.isEmpty())return;
+        ArrayList<Media> items=new ArrayList<>();
+        for(Media m:inputs){
+            if(items.size()>=24)break;
+            if(displayed.add(identity(m)))items.add(m);
+        }
+        if(items.isEmpty())return;
+        addCatalog(title,items);
+    }
+    private ArrayList<Media> matching(java.util.function.Predicate<Media> condition){
+        ArrayList<Media> list=new ArrayList<>();
+        for(Media m:knownItems)if(condition.test(m))list.add(m);
+        return list;
+    }
+    private void refreshCatalogRows(){
+        if(catalogArea==null||showingDetails)return;
+        catalogArea.removeAllViews();
+        updateSpotlight();
+        if("minha".equals(activeSection))return;
+        Set<String> shown=new HashSet<>();
+        if("filmes".equals(activeSection)||"series".equals(activeSection)){
+            boolean movie="filmes".equals(activeSection);
+            java.util.function.Predicate<Media> type=m->movie?isFilm(m):isSeries(m);
+            addRowFrom("Em alta",matching(m->type.test(m)&&!m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
+            String[] genres={"Ação","Comédia","Drama","Suspense","Terror","Animação","Ficção científica","Documentário","Romance"};
+            String[] words={"action","comedy","drama","thriller","horror","animation","sci-fi","documentary","romance"};
+            for(int i=0;i<genres.length;i++){
+                String term=words[i];
+                addRowFrom(genres[i],matching(m->type.test(m)&&hasGenre(m,term)),shown);
+            }
+            addRowFrom("Outros títulos",matching(type),shown);
+        }else{
+            addRowFrom("Novidades",matching(m->m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
+            addRowFrom("Filmes para descobrir",matching(this::isFilm),shown);
+            addRowFrom("Séries para maratonar",matching(this::isSeries),shown);
+            addRowFrom("Canais e TV",matching(this::isChannel),shown);
+        }
+        if(knownItems.isEmpty()){
+            TextView empty=text("Nenhum catálogo carregado. Verifique sua internet ou configure uma fonte em Fontes.",15,0xffb1c8d5,false);
+            empty.setPadding(dp(5),dp(25),dp(5),dp(25));catalogArea.addView(empty);
+        }
+    }
     private void addCatalog(String header,ArrayList<Media> media){
-        LinearLayout block=new LinearLayout(this);block.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(18);
-        content.addView(block,lp);
-        TextView heading=text(header.toUpperCase(),16,AQUA,true);
-        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,-2);hp.bottomMargin=dp(13);
+        LinearLayout block=new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(23);
+        catalogArea.addView(block,lp);
+        TextView heading=text(header,19,Color.WHITE,true);
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,-2);hp.bottomMargin=dp(15);
         block.addView(heading,hp);
-        HorizontalScrollView row=new HorizontalScrollView(this);row.setHorizontalScrollBarEnabled(false);
-        row.setClipChildren(false);
-        LinearLayout items=new LinearLayout(this);items.setClipChildren(false);
+        HorizontalScrollView row=new HorizontalScrollView(this);
+        row.setHorizontalScrollBarEnabled(false);row.setClipChildren(false);
+        row.setClipToPadding(false);
+        LinearLayout items=new LinearLayout(this);items.setClipChildren(false);items.setPadding(dp(7),0,dp(14),dp(6));
         for(Media m:media){
-            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
-            card.setFocusable(true);card.setGravity(Gravity.CENTER_HORIZONTAL);
-            card.setBackground(shape(PANEL,0xff284357));
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(138),dp(228));
-            cp.rightMargin=dp(17);items.addView(card,cp);
+            LinearLayout card=new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);card.setFocusable(true);
+            card.setBackground(shape(0xff152537,0));
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(156),dp(257));
+            cp.rightMargin=dp(15);items.addView(card,cp);
             ImageView poster=new ImageView(this);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            poster.setBackgroundColor(0xff224055);
-            card.addView(poster,new LinearLayout.LayoutParams(-1,dp(170)));
-            TextView label=text(m.name,12,Color.WHITE,true);label.setMaxLines(2);
-            label.setPadding(dp(8),dp(7),dp(8),0);card.addView(label);
-            card.setOnFocusChangeListener((v,f)->{
-                v.setBackground(shape(f?PANEL2:PANEL,f?AQUA:0xff284357));
-                v.animate().scaleX(f?1.05f:1f).scaleY(f?1.05f:1f).setDuration(120).start();
-            });
+            poster.setBackgroundColor(0xff263647);
+            card.addView(poster,new LinearLayout.LayoutParams(-1,dp(218)));
+            TextView label=text(m.name,13,0xffe9f3fa,true);label.setMaxLines(2);
+            label.setPadding(dp(7),dp(7),dp(7),0);
+            card.addView(label,new LinearLayout.LayoutParams(-1,dp(37)));
             card.setOnClickListener(v->details(m));
-            if(m.poster.startsWith("https://"))loadPoster(m.poster,poster);
+            card.setOnFocusChangeListener((v,focused)->{
+                v.setBackground(shape(focused?0xff25465c:0xff152537,focused?AQUA:0));
+                v.setElevation(dp(focused?14:0));
+                v.animate().scaleX(focused?1.06f:1f).scaleY(focused?1.06f:1f).setDuration(125).start();
+                label.setTextColor(focused?AQUA:0xffe9f3fa);
+            });
+            if(m.poster!=null&&m.poster.startsWith("https://"))loadPoster(m.poster,poster);
         }
-        row.addView(items);block.addView(row,new LinearLayout.LayoutParams(-1,dp(244)));
+        row.addView(items);
+        block.addView(row,new LinearLayout.LayoutParams(-1,dp(278)));
     }
     private void loadPoster(String url,ImageView image){
         pool.execute(()->{
@@ -714,7 +790,7 @@ public final class MainActivity extends Activity {
         startActivity(intent);
     }
     private void message(String text){new AlertDialog.Builder(this).setTitle("Shock TV").setMessage(text).setPositiveButton("OK",null).show();}
-    private static final class Media{String id="",type="",name="",poster="",description="",source="",episodeId="";}
+    private static final class Media{String id="",type="",name="",poster="",description="",source="",episodeId="",origin="",catalogId="",genre="";}
     private JSONObject getJson(String url) throws Exception{
         if(!url.startsWith("https://"))throw new Exception("Fonte HTTPS necessária");
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
