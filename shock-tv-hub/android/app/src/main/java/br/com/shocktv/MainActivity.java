@@ -21,6 +21,13 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.FrameLayout;
+import android.util.LruCache;
+import android.os.Handler;
+import android.os.Looper;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.LinkedHashMap;
 import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -43,6 +50,19 @@ public final class MainActivity extends Activity {
     private UserLibrary library;
     private LinearLayout personal;
     private final ArrayList<Media> knownItems=new ArrayList<>();
+    private final LruCache<String,Bitmap> artwork=new LruCache<String,Bitmap>(12*1024*1024){
+        @Override protected int sizeOf(String key,Bitmap value){return value.getByteCount();}
+    };
+    private final Handler ui=new Handler(Looper.getMainLooper());
+    private String activeSection="inicio";
+    private LinearLayout catalogArea;
+    private LinearLayout spotlightHolder;
+    private View browseRoot;
+    private ScrollView browseScroll;
+    private boolean showingDetails=false;
+    private int browseOffset=0;
+    private final Runnable refreshTask=()->refreshCatalogRows();
+
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -81,53 +101,152 @@ public final class MainActivity extends Activity {
         if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         return t;
     }
+    /** 10-foot user interface: calm left rail, content first, consistent D-pad focus. */
     private void render() {
-        ScrollView scroll=new ScrollView(this);
-        scroll.setBackgroundColor(BG);scroll.setFillViewport(true);
-        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(42),dp(22),dp(42),dp(40));
-        scroll.addView(content);
+        showingDetails=false;
+        LinearLayout shell=new LinearLayout(this);
+        shell.setOrientation(LinearLayout.HORIZONTAL);
+        shell.setBackgroundColor(BG);
+        shell.setFocusableInTouchMode(true);
 
-        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView logo=text("SHOCK  TV",26,AQUA,true);
-        header.addView(logo,new LinearLayout.LayoutParams(0,dp(53),1f));
-        Button b=button("＋ Adicionar addon",()->addSourceDialog());
-        header.addView(button("⌕ Buscar",()->searchCatalog()));
-        header.addView(button("Minha biblioteca",()->showFullLibrary()));
-        header.addView(b);content.addView(header);
+        LinearLayout sidebar=new LinearLayout(this);
+        sidebar.setOrientation(LinearLayout.VERTICAL);
+        sidebar.setPadding(dp(13),dp(26),dp(8),dp(15));
+        sidebar.setBackgroundColor(0xff0b1926);
+        shell.addView(sidebar,new LinearLayout.LayoutParams(dp(176),-1));
+        TextView logo=text("SHOCK",25,Color.WHITE,true);
+        logo.setLetterSpacing(.08f);
+        sidebar.addView(logo);
+        TextView logo2=text("TV",19,AQUA,true);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(38);
+        sidebar.addView(logo2,lp);
+        navItem(sidebar,"⌂","Início","inicio");
+        navItem(sidebar,"▣","Filmes","filmes");
+        navItem(sidebar,"▤","Séries","series");
+        navItem(sidebar,"♡","Minha lista","minha");
+        navItem(sidebar,"⌕","Buscar","buscar");
+        navItem(sidebar,"⊞","Fontes","fontes");
+        View fill=new View(this);sidebar.addView(fill,new LinearLayout.LayoutParams(1,0,1f));
+        TextView foot=text("SHOCK TV\nv"+BuildConfig.VERSION_NAME,11,0xff648397,false);
+        sidebar.addView(foot);
 
-        View divider=new View(this);divider.setBackgroundColor(0xff26445b);
-        content.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+        browseScroll=new ScrollView(this);
+        browseScroll.setClipToPadding(false);
+        browseScroll.setFillViewport(true);
+        browseScroll.setVerticalScrollBarEnabled(false);
+        shell.addView(browseScroll,new LinearLayout.LayoutParams(0,-1,1f));
+        content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(29),dp(24),dp(27),dp(65));
+        browseScroll.addView(content);
 
-        LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.VERTICAL);
-        hero.setPadding(dp(25),dp(27),dp(25),dp(26));
-        LinearLayout.LayoutParams heroLp=new LinearLayout.LayoutParams(-1,-2);heroLp.topMargin=dp(20);
-        hero.setBackground(shape(0xff11354d,0xff275d70));
-        content.addView(hero,heroLp);
-        hero.addView(text("SEU CINEMA. SUA TV.",12,AQUA,true));
-        TextView headline=text("Tudo em uma tela.",34,Color.WHITE,true);
-        LinearLayout.LayoutParams h=new LinearLayout.LayoutParams(-1,-2);h.topMargin=dp(7);
-        hero.addView(headline,h);
-        TextView desc=text("Explore catálogos compatíveis com o protocolo Stremio. Adicione seus addons e reproduza mídias autorizadas.",15,0xffc3d7e2,false);
-        desc.setMaxLines(2);hero.addView(desc);
-        LinearLayout nav=new LinearLayout(this);nav.setPadding(0,dp(10),0,0);
-        nav.addView(button("Reproduzir URL",()->playDirect()));
-        nav.addView(button("Minhas fontes",()->showSources()));
-        nav.addView(button("Assistir mais tarde",()->showAll("later")));
-        nav.addView(button("▶ Curtidos",()->playLikedPlaylist()));
-        hero.addView(nav);
-        personal=new LinearLayout(this);personal.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.topMargin=dp(20);
-        content.addView(personal,pp);
-        showPersonal();
+        LinearLayout toolbar=new LinearLayout(this);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.addView(text(sectionLabel(activeSection),22,Color.WHITE,true),
+                new LinearLayout.LayoutParams(0,dp(44),1f));
+        toolbar.addView(text("SEU ENTRETENIMENTO",11,0xff8ca8b9,true));
+        content.addView(toolbar);
 
-        subtitle=text("Carregando catálogos...",14,0xff85a7ba,false);
-        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,-2);slp.topMargin=dp(15);
-        content.addView(subtitle,slp);
-        content.addView(text("Catálogos reais carregados dos seus addons. Sem itens de demonstração.",12,0xff819baa,false));
-        setContentView(scroll);
+        spotlightHolder=new LinearLayout(this);
+        spotlightHolder.setOrientation(LinearLayout.VERTICAL);
+        content.addView(spotlightHolder,new LinearLayout.LayoutParams(-1,-2));
+        personal=new LinearLayout(this);
+        personal.setOrientation(LinearLayout.VERTICAL);
+        content.addView(personal,new LinearLayout.LayoutParams(-1,-2));
+        catalogArea=new LinearLayout(this);
+        catalogArea.setOrientation(LinearLayout.VERTICAL);
+        content.addView(catalogArea,new LinearLayout.LayoutParams(-1,-2));
+
+        if("inicio".equals(activeSection)||"minha".equals(activeSection))showPersonal();
+        updateSpotlight();
+        refreshCatalogRows();
+        browseRoot=shell;
+        setContentView(shell);
+        browseScroll.post(()->browseScroll.scrollTo(0,0));
     }
-
+    private String sectionLabel(String key){
+        if("filmes".equals(key))return "Filmes";
+        if("series".equals(key))return "Séries";
+        if("minha".equals(key))return "Minha biblioteca";
+        return "Início";
+    }
+    private void navItem(LinearLayout parent,String glyph,String label,String route){
+        TextView item=text(glyph+"   "+label,16,route.equals(activeSection)?Color.WHITE:0xffa9c0cd,route.equals(activeSection));
+        item.setFocusable(true);
+        item.setClickable(true);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(14),0,dp(3),0);
+        item.setBackground(shape(route.equals(activeSection)?0xff19465b:0xff0b1926,route.equals(activeSection)?AQUA:0));
+        LinearLayout.LayoutParams navParams=new LinearLayout.LayoutParams(-1,dp(53));
+        navParams.bottomMargin=dp(7);
+        parent.addView(item,navParams);
+        item.setOnClickListener(v->{
+            if("buscar".equals(route)){searchCatalog();return;}
+            if("fontes".equals(route)){showSources();return;}
+            if(route.equals(activeSection))return;
+            activeSection=route;render();
+        });
+        item.setOnFocusChangeListener((v,hasFocus)->{
+            item.setTextColor(hasFocus?Color.WHITE:(route.equals(activeSection)?Color.WHITE:0xffa9c0cd));
+            item.setBackground(shape(hasFocus?0xff205870:(route.equals(activeSection)?0xff19465b:0xff0b1926),
+                    hasFocus?AQUA:(route.equals(activeSection)?0xff386e83:0)));
+            v.animate().scaleX(hasFocus?1.025f:1f).setDuration(120).start();
+        });
+    }
+    private void updateSpotlight(){
+        if(spotlightHolder==null)return;
+        spotlightHolder.removeAllViews();
+        if(!"inicio".equals(activeSection))return;
+        if(knownItems.isEmpty()){
+            LinearLayout empty=new LinearLayout(this);
+            empty.setPadding(dp(20),dp(14),dp(20),dp(15));
+            empty.setBackground(shape(0xff142536,0));
+            empty.addView(text("Carregando seus catálogos…",15,0xffb9d7e2,false));
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(15);p.bottomMargin=dp(15);
+            spotlightHolder.addView(empty,p);
+            return;
+        }
+        Media featured=knownItems.get(0);
+        LinearLayout hero=new LinearLayout(this);
+        hero.setOrientation(LinearLayout.HORIZONTAL);
+        hero.setGravity(Gravity.CENTER_VERTICAL);
+        hero.setBackground(shape(0xff162b3a,0));
+        LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,dp(232));
+        hl.topMargin=dp(16);hl.bottomMargin=dp(21);
+        spotlightHolder.addView(hero,hl);
+        LinearLayout copy=new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(25),dp(15),dp(12),dp(16));
+        hero.addView(copy,new LinearLayout.LayoutParams(0,-1,1.4f));
+        copy.addView(text("EM DESTAQUE  ·  "+("series".equals(featured.type)?"SÉRIE":"FILME"),11,AQUA,true));
+        TextView title=text(featured.name,31,Color.WHITE,true);title.setMaxLines(2);
+        LinearLayout.LayoutParams tl=new LinearLayout.LayoutParams(-1,-2);tl.topMargin=dp(7);
+        copy.addView(title,tl);
+        TextView desc=text(featured.description==null?"":featured.description,13,0xffb6cbd8,false);
+        desc.setMaxLines(2);
+        LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,-2);dl.topMargin=dp(5);
+        copy.addView(desc,dl);
+        LinearLayout buttons=new LinearLayout(this);
+        LinearLayout.LayoutParams bl=new LinearLayout.LayoutParams(-1,-2);bl.topMargin=dp(11);
+        copy.addView(buttons,bl);
+        buttons.addView(button("Ver detalhes",()->details(featured)));
+        buttons.addView(button("＋ Minha lista",()->{
+            UserLibrary.Entry e=identify(featured);
+            library.later(e.key,!e.watchLater);
+            showPersonal();
+            Toast.makeText(this,e.watchLater?"Removido da lista":"Salvo para mais tarde",Toast.LENGTH_SHORT).show();
+        }));
+        ImageView poster=new ImageView(this);
+        poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        poster.setBackgroundColor(0xff203849);
+        hero.addView(poster,new LinearLayout.LayoutParams(0,-1,.85f));
+        if(featured.poster!=null&&featured.poster.startsWith("https://"))loadPoster(featured.poster,poster);
+    }
+    private void scheduleRefresh(){
+        ui.removeCallbacks(refreshTask);
+        ui.postDelayed(refreshTask,650L);
+    }
     private Button button(String label,Runnable task){
         Button b=new Button(this);b.setAllCaps(false);b.setText(label);
         b.setTextColor(Color.WHITE);b.setTextSize(13);b.setBackground(shape(0xff21617a,0xff3a899e));
