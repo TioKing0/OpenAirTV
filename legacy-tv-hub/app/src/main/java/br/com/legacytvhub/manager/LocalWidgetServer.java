@@ -68,8 +68,8 @@ final class LocalWidgetServer {
         }, "LegacyTVHub-HTTP");
         worker.setDaemon(true);
         worker.start();
-        listener.changed("Servidor de diagnóstico disponível em http://" + hostIp + ":8080/widgetlist.xml"
-            + "\nATENÇÃO: A sincronização Orsay usa normalmente a porta 80, não 8080. Este servidor comprova apenas a comunicação local; não é uma instalação na TV.");
+        listener.changed("Acesso por Wi-Fi ativado. Abra o navegador da TV e digite:\nhttp://" + hostIp + ":8080/"
+            + "\nEste modo NÃO instala um aplicativo no Smart Hub.");
     }
 
     synchronized void stop() {
@@ -100,7 +100,15 @@ final class LocalWidgetServer {
                 return;
             }
             String path = parts[1].split("\\?", 2)[0];
-            if (path.equals("/widgetlist.xml")) {
+            if (path.equals("/") || path.equals("/index.html")) {
+                String html = new String(readAsset("tv-web/index.html"), StandardCharsets.UTF_8)
+                    .replace("{{VERSION}}", BuildConfig.VERSION_NAME);
+                response(out, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
+            } else if (path.equals("/tv.css")) {
+                response(out, 200, "text/css; charset=utf-8", readAsset("tv-web/style.css"));
+            } else if (path.equals("/tv.js")) {
+                response(out, 200, "application/javascript; charset=utf-8", readAsset("tv-web/main.js"));
+            } else if (path.equals("/widgetlist.xml")) {
                 String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                     + "<rsp stat=\"ok\"><list><widget id=\"LegacyTVHub\">"
                     + "<title>Legacy TV Hub</title><compression type=\"zip\" size=\"" + assetBytes().length + "\"/>"
@@ -115,6 +123,15 @@ final class LocalWidgetServer {
             }
         } catch (Exception error) {
             listener.changed("Erro na transmissão: " + error.getMessage());
+        }
+    }
+
+    private byte[] readAsset(String name) throws IOException {
+        try (InputStream in = context.getAssets().open(name); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[8192];
+            int count;
+            while ((count = in.read(buf)) != -1) out.write(buf, 0, count);
+            return out.toByteArray();
         }
     }
 

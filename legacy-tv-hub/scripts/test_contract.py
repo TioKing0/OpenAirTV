@@ -27,6 +27,8 @@ with ZipFile(usb) as z:
 server = (root/'app/src/main/java/br/com/legacytvhub/manager/LocalWidgetServer.java').read_text()
 activity = (root/'app/src/main/java/br/com/legacytvhub/manager/MainActivity.java').read_text()
 assert 'new ServerSocket(8080' in server
-assert 'LegacyTVHub_USB_' in activity
-assert 'ACTION_CREATE_DOCUMENT' in activity
-print('Contract OK:', version, product['androidApplicationId'], product['orsayWidgetId'], 'USB and LAN')
+assert 'tv-web/index.html' in server
+assert 'http://" + hostIp + ":8080/' in server
+assert 'INICIAR ACESSO POR WI-FI' in activity
+assert 'ACTION_CREATE_DOCUMENT' not in activity
+print('Contract OK:', version, product['androidApplicationId'], product['orsayWidgetId'], 'WiFi web client')
