@@ -1,0 +1,75 @@
+name: Shock TV Products
+on:
+  push:
+    branches: [shock-tv-hub-studio]
+    paths:
+      - "shock-tv-hub/**"
+      - ".github/workflows/shock-tv-products.yml"
+      - "legacy-tv-hub/widget/**"
+      - "legacy-tv-hub/scripts/build_widget.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-tv:
+    name: Android TV APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: shock-tv-hub/android
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Compile Shock TV
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify APK
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish Android TV preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shock-TV-AndroidTV-v0.1.0-APK
+          path: shock-tv-hub/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    name: Windows Orsay Installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate Samsung Orsay widget
+        shell: pwsh
+        run: |
+          python legacy-tv-hub/scripts/build_widget.py
+          python -c "import zipfile; p='legacy-tv-hub/app/src/main/assets/LegacyTVHub_0.1.2.zip'; z=zipfile.ZipFile(p); assert 'config.xml' in z.namelist()"
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+          python -m PyInstaller --clean --onefile --noconsole --name ShockTVHubStudio --add-data "legacy-tv-hub/app/src/main/assets/LegacyTVHub_0.1.2.zip;." shock-tv-hub/windows/main.py
+          if (!(Test-Path dist/ShockTVHubStudio.exe)) { throw "Windows EXE not found" }
+      - name: Publish portable Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shock-TV-Hub-Studio-Windows
+          path: dist/ShockTVHubStudio.exe
+          if-no-files-found: error
+          retention-days: 30
