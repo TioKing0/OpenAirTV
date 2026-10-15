@@ -43,8 +43,22 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int BG=0xff091420, PANEL=0xff14283a, PANEL2=0xff1b3447, AQUA=0xff68d8e9;
     private static final String CINEMETA="https://v3-cinemeta.strem.io/manifest.json";
+    // Bundled manifest addresses. A manifest is not a bundled video or proof of playback.
+    private static final String FENIXFLIX="https://fenixflix.fenixhub.online/manifest.json";
+    private static final String TORRENTIO="https://torrentio.strem.fun/manifest.json";
+    private static final String NETFLIX_CATALOG="https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json";
+    private static final String PIRATEBAY_PLUS="https://thepiratebay-plus.strem.fun/manifest.json";
+    private static final String[] BUNDLED_ADDONS={
+        CINEMETA,FENIXFLIX,TORRENTIO,NETFLIX_CATALOG,PIRATEBAY_PLUS
+    };
+    private static final String[] BUNDLED_NAMES={
+        "Cinemeta • Metadados","FenixFlix • Addon comunitário",
+        "Torrentio • Busca de streams","Netflix Catalog • Metadados",
+        "ThePirateBay+ • Busca de streams"
+    };
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ArrayList<String> sources=new ArrayList<>();
+    private final Set<String> disabledBundled=new HashSet<>();
     private LinearLayout content;
     private TextView subtitle;
     private UserLibrary library;
@@ -74,20 +88,39 @@ public final class MainActivity extends Activity {
         for (String source : new ArrayList<>(sources)) loadSource(source);
     }
 
+    private static boolean isBundled(String url) {
+        for(String builtin:BUNDLED_ADDONS)if(builtin.equals(url))return true;
+        return false;
+    }
     private void loadSavedSources() {
-        sources.add(CINEMETA);
+        sources.clear();
+        disabledBundled.clear();
+        disabledBundled.addAll(getPreferences(0).getStringSet("disabled_bundled_addons_v1",
+            java.util.Collections.emptySet()));
+        for(String url:BUNDLED_ADDONS)
+            if(!disabledBundled.contains(url))sources.add(url);
         try {
-            JSONArray array=new JSONArray(getPreferences(0).getString("sources","[]"));
-            for(int i=0;i<array.length()&&i<25;i++) {
-                String url=array.optString(i,"");
-                if(url.startsWith("https://")&&!sources.contains(url)) sources.add(url);
+            // Preserve add-ons installed by the viewer on earlier app versions.
+            JSONArray saved=new JSONArray(getPreferences(0).getString("sources","[]"));
+            for(int i=0;i<saved.length()&&i<40;i++) {
+                String url=saved.optString(i,"");
+                if(url.startsWith("https://")&&!sources.contains(url)&&!isBundled(url))
+                    sources.add(url);
             }
-        } catch(Exception ignored) {}
+        }catch(Exception ignored){}
     }
     private void saveSources() {
-        JSONArray array=new JSONArray();
-        for(String url:sources) if(!url.equals(CINEMETA))array.put(url);
-        getPreferences(0).edit().putString("sources",array.toString()).apply();
+        JSONArray custom=new JSONArray();
+        for(String url:sources)if(!isBundled(url))custom.put(url);
+        getPreferences(0).edit()
+            .putString("sources",custom.toString())
+            .putStringSet("disabled_bundled_addons_v1",new HashSet<>(disabledBundled))
+            .apply();
+    }
+    private void reloadCatalogs(){
+        knownItems.clear();
+        render();
+        for(String source:new ArrayList<>(sources))loadSource(source);
     }
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
     private GradientDrawable shape(int color,int stroke) {
@@ -263,45 +296,90 @@ public final class MainActivity extends Activity {
         EditText field=new EditText(this);
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
-        field.setHint("https://exemplo.org/manifest.json");
-        LinearLayout wrap=new LinearLayout(this);wrap.setPadding(dp(24),dp(10),dp(24),0);wrap.addView(field);
+        field.setHint("https://servidor/manifest.json");
+        LinearLayout wrap=new LinearLayout(this);
+        wrap.setPadding(dp(24),dp(12),dp(24),0);
+        wrap.addView(field);
         new AlertDialog.Builder(this).setTitle("Adicionar addon Stremio")
-            .setMessage("Digite a URL HTTPS do manifest de um addon que você tem autorização para usar.")
+            .setMessage("Informe o endereço do manifesto HTTPS. A presença de um addon não garante vídeos reproduzíveis.")
             .setView(wrap).setNegativeButton("Cancelar",null)
             .setPositiveButton("Verificar",(d,w)->{
                 String url=field.getText().toString().trim();
                 if(!url.startsWith("https://")||!url.endsWith("/manifest.json")) {
-                    message("Informe uma URL HTTPS terminada em /manifest.json.");return;
+                    message("Informe um HTTPS terminado em /manifest.json.");return;
                 }
-                if(sources.contains(url)){message("Essa fonte já está cadastrada.");return;}
-                if(sources.size()>=25){message("Limite atual de 25 fontes.");return;}
+                if(sources.contains(url)){message("Esta fonte já está ativa.");return;}
+                if(isBundled(url)){
+                    disabledBundled.remove(url);
+                    sources.add(url);
+                    saveSources();
+                    reloadCatalogs();
+                    return;
+                }
+                if(sources.size()>=40){message("Limite atual de 40 fontes.");return;}
                 validateSource(url);
             }).show();
     }
-
     private void validateSource(String url){
-        subtitle.setText("Verificando addon...");
         pool.execute(()->{
             try {
                 JSONObject json=getJson(url);
-                if(json.optString("id").isEmpty()||json.optString("name").isEmpty()||!json.has("resources"))throw new Exception("Manifest incompleto.");
+                if(json.optString("id").isEmpty()||json.optString("name").isEmpty()
+                    ||!json.has("resources"))throw new Exception("Manifest incompleto.");
                 String label=json.optString("name");
-                runOnUiThread(()->{sources.add(url);saveSources();message("Fonte adicionada: "+label);loadSource(url);});
-            } catch(Exception e){runOnUiThread(()->message("Não foi possível validar o addon: "+e.getMessage()));}
+                runOnUiThread(()->{
+                    if(!sources.contains(url)){
+                        sources.add(url);saveSources();
+                        reloadCatalogs();
+                    }
+                    message("Fonte adicionada: "+label);
+                });
+            }catch(Exception e){
+                runOnUiThread(()->message("Não foi possível validar o addon: "+e.getMessage()));
+            }
         });
     }
-    private void showSources(){
-        String[] names=new String[sources.size()];
-        for(int i=0;i<sources.size();i++)names[i]=sources.get(i);
-        new AlertDialog.Builder(this).setTitle("Fontes ativas ("+sources.size()+")")
-            .setItems(names,(d,which)->{
-                if(which==0){message("Cinemeta é a fonte de metadados padrão.");return;}
-                new AlertDialog.Builder(this).setTitle("Remover esta fonte?")
-                    .setMessage(names[which]).setNegativeButton("Cancelar",null)
-                    .setPositiveButton("Remover",(dd,w)->{sources.remove(names[which]);saveSources();knownItems.clear();render();for(String s:sources)loadSource(s);}).show();
-            }).setPositiveButton("Adicionar",(d,w)->addSourceDialog()).setNegativeButton("Fechar",null).show();
+    private void showSources() {
+        ArrayList<String> all=new ArrayList<>();
+        ArrayList<String> labels=new ArrayList<>();
+        for(int i=0;i<BUNDLED_ADDONS.length;i++){
+            String url=BUNDLED_ADDONS[i];
+            boolean active=sources.contains(url);
+            all.add(url);
+            labels.add((active?"●  ":"○  ")+BUNDLED_NAMES[i]+(active?"  ·  Ativado":"  ·  Desativado"));
+        }
+        for(String url:sources){
+            if(isBundled(url))continue;
+            all.add(url);
+            labels.add("●  "+url);
+        }
+        new AlertDialog.Builder(this)
+          .setTitle("Fontes • "+sources.size()+" ativa(s)")
+          .setMessage("Os addons predefinidos podem ser ativados ou desativados. "
+                    +"Fontes de torrent exigem mecanismo próprio e não são reproduzidas diretamente pelo Media3.")
+          .setItems(labels.toArray(new String[0]),(dialog,which)->{
+              String url=all.get(which);
+              if(isBundled(url)){
+                  if(sources.contains(url)){
+                      sources.remove(url);
+                      disabledBundled.add(url);
+                  }else{
+                      disabledBundled.remove(url);
+                      sources.add(url);
+                  }
+                  saveSources();reloadCatalogs();showSources();
+              }else{
+                  new AlertDialog.Builder(this).setTitle("Remover addon?")
+                    .setMessage(url).setNegativeButton("Cancelar",null)
+                    .setPositiveButton("Remover",(d,w)->{
+                        sources.remove(url);saveSources();
+                        reloadCatalogs();showSources();
+                    }).show();
+              }
+          })
+          .setPositiveButton("Adicionar fonte",(d,w)->addSourceDialog())
+          .setNegativeButton("Fechar",null).show();
     }
-
     private void loadSource(String manifestUrl){
         pool.execute(()->{
             try{
