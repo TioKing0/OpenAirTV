@@ -2,12 +2,17 @@ package br.com.shocktv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -15,6 +20,7 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
@@ -22,206 +28,393 @@ import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
-/** Playback with actionable HTTP status errors and Stremio-declared media request headers. */
+/** Full-screen player with bounded verified stream alternatives, adaptive tracks and quick D-pad controls. */
 @UnstableApi
 public final class PlayerActivity extends Activity {
-    private static final long SAVE_INTERVAL_MS=10000L;
+    private static final String TAG="ShockTV-Player";
     private ExoPlayer player;
+    private PlayerView playerView;
     private UserLibrary library;
     private String currentKey;
-    private boolean startedCurrent;
-    private boolean markedFinished;
-    private boolean showingError;
+    private String title;
+    private final ArrayList<StreamProbe.Option> verified=new ArrayList<>();
+    private final Set<String> failedSources=new HashSet<>();
+    private int selectedIndex=-1;
+    private boolean startedCurrent=false,markedFinished=false,showingError=false;
+    private boolean queue=false,closing=false;
+    private long lastKnownPosition=0L;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable periodic=new Runnable(){
         @Override public void run(){
             save(false);
-            if(player!=null)handler.postDelayed(this,SAVE_INTERVAL_MS);
+            if(player!=null)handler.postDelayed(this,10000L);
         }
     };
+    private String[] queuedUrls,queuedKeys;
+    private Button qualityButton,languageButton,sourceButton;
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        String url=getIntent().getStringExtra("url");
-        String name=getIntent().getStringExtra("title");
-        String key=getIntent().getStringExtra("libraryKey");
-        if(url==null||!isMediaUrl(url)||key==null||key.isEmpty()){
-            Toast.makeText(this,"O endereço de mídia não é válido.",Toast.LENGTH_LONG).show();
+        String original=getIntent().getStringExtra("url");
+        title=getIntent().getStringExtra("title");
+        currentKey=getIntent().getStringExtra("libraryKey");
+        if(!isMediaUrl(original)||currentKey==null||currentKey.isEmpty()){
+            Toast.makeText(this,"Endereço de mídia inválido.",Toast.LENGTH_LONG).show();
             finish();return;
         }
         library=new UserLibrary(this);
-        library.identify(key,getIntent().getStringExtra("id"),getIntent().getStringExtra("type"),
-            name,getIntent().getStringExtra("poster"),getIntent().getStringExtra("description"),
+        library.identify(currentKey,getIntent().getStringExtra("id"),getIntent().getStringExtra("type"),
+            title,getIntent().getStringExtra("poster"),getIntent().getStringExtra("description"),
             getIntent().getStringExtra("source"),getIntent().getStringExtra("episodeId"));
-        boolean restart=getIntent().getBooleanExtra("restart",false);
-        UserLibrary.Entry initial=library.get(key);
-        long restore=initial.canContinue()&&!restart?initial.positionMs:0L;
+        UserLibrary.Entry prior=library.get(currentKey);
+        lastKnownPosition=!getIntent().getBooleanExtra("restart",false)&&prior.canContinue()?
+            prior.positionMs:0;
+        queuedUrls=getIntent().getStringArrayExtra("playlistUrls");
+        queuedKeys=getIntent().getStringArrayExtra("playlistKeys");
+        queue=queuedUrls!=null&&queuedKeys!=null&&queuedUrls.length>0&&
+              queuedUrls.length==queuedKeys.length&&queuedUrls.length<=200;
 
-        String[] urls=getIntent().getStringArrayExtra("playlistUrls");
-        String[] keys=getIntent().getStringArrayExtra("playlistKeys");
-        boolean isQueue=urls!=null&&keys!=null&&urls.length>0&&urls.length<=200&&urls.length==keys.length;
-
-        PlayerView view=new PlayerView(this);
-        view.setUseController(true);
-        view.setControllerShowTimeoutMs(8500);
-        view.setFocusable(true);view.setFocusableInTouchMode(true);
-        view.setKeepScreenOn(true);
-        view.setShowSubtitleButton(true);
-        setContentView(view,new FrameLayout.LayoutParams(-1,-1));
-
-        DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory()
-            .setUserAgent("ShockTV/0.3.3 (Android TV)");
-        Map<String,String> headers=new HashMap<>();
-        String[] headerNames=getIntent().getStringArrayExtra("streamHeaderNames");
-        String[] headerValues=getIntent().getStringArrayExtra("streamHeaderValues");
-        if(!isQueue&&headerNames!=null&&headerValues!=null&&headerNames.length==headerValues.length){
-            for(int i=0;i<headerNames.length&&i<12;i++){
-                String header=headerNames[i],value=headerValues[i];
-                if(header==null||value==null||value.length()>2048||value.indexOf('\r')>=0||value.indexOf('\n')>=0)continue;
-                // Sensitive headers may only be transmitted over TLS.
-                if(!url.startsWith("https://")&&("Authorization".equalsIgnoreCase(header)||"Cookie".equalsIgnoreCase(header)))continue;
-                if("User-Agent".equalsIgnoreCase(header)||"Referer".equalsIgnoreCase(header)
-                    ||"Origin".equalsIgnoreCase(header)||"Accept".equalsIgnoreCase(header)
-                    ||"Authorization".equalsIgnoreCase(header)||"Cookie".equalsIgnoreCase(header))
-                    headers.put(header,value);
-            }
+        String encoded=getIntent().getStringExtra("verifiedStreamOptions");
+        if(!queue&&encoded!=null){
+            try{
+                JSONArray arr=new JSONArray(encoded);
+                for(int i=0;i<arr.length()&&i<24;i++){
+                    JSONObject obj=arr.optJSONObject(i);if(obj==null)continue;
+                    StreamProbe.Option o=StreamProbe.Option.fromJson(obj);
+                    if(isMediaUrl(o.url))verified.add(o);
+                }
+            }catch(Exception ignored){}
         }
-        if(!headers.isEmpty())http.setDefaultRequestProperties(headers);
-        DefaultDataSource.Factory dataSource=new DefaultDataSource.Factory(this,http);
-        player=new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(dataSource)).build();
-        view.setPlayer(player);
-
-        ArrayList<MediaItem> items=new ArrayList<>();
-        if(isQueue){
-            for(int i=0;i<urls.length;i++){
-                if(!isMediaUrl(urls[i])||keys[i]==null||keys[i].isEmpty())continue;
-                UserLibrary.Entry record=library.get(keys[i]);
-                items.add(createItem(urls[i],keys[i],record.title));
-            }
+        if(verified.isEmpty()){
+            StreamProbe.Option direct=StreamProbe.candidate(original,
+               "Fonte selecionada",getIntent().getStringArrayExtra("streamHeaderNames"),
+               getIntent().getStringArrayExtra("streamHeaderValues"));
+            verified.add(direct);
         }
-        if(items.isEmpty())items.add(createItem(url,key,name));
-        currentKey=items.get(0).mediaId;
-        startedCurrent=false;
-        markedFinished=false;
+        selectedIndex=0;
+        for(int i=0;i<verified.size();i++)
+            if(original.equals(verified.get(i).url)){selectedIndex=i;break;}
 
-        player.addListener(new Player.Listener(){
-            @Override public void onPlayerError(PlaybackException error){
-                save(false);
-                presentError(error);
-            }
-            @Override public void onPlaybackStateChanged(int state){
-                if(state==Player.STATE_READY){
-                    if(!startedCurrent){
-                        startedCurrent=true;
-                        String mediaUrl=currentUrl();
-                        library.start(currentKey,mediaUrl);
+        FrameLayout layout=new FrameLayout(this);
+        layout.setBackgroundColor(0xff000000);
+        playerView=new PlayerView(this);
+        playerView.setUseController(true);
+        playerView.setControllerShowTimeoutMs(6500);
+        playerView.setFocusable(true);playerView.setFocusableInTouchMode(true);
+        playerView.setKeepScreenOn(true);
+        playerView.setShowSubtitleButton(true);
+        layout.addView(playerView,new FrameLayout.LayoutParams(-1,-1));
+        if(!queue)installQuickControls(layout);
+        setContentView(layout);
+        playOption(selectedIndex,lastKnownPosition,false);
+        handler.postDelayed(periodic,10000L);
+        playerView.requestFocus();
+    }
+
+    private int dp(int size){return (int)(size*getResources().getDisplayMetrics().density+.5f);}
+    private Button control(String label){
+        Button b=new Button(this);
+        b.setText(label);b.setTextSize(13);b.setTextColor(0xffedfaff);
+        b.setAllCaps(false);b.setFocusable(true);
+        b.setBackgroundTintList(ColorStateList.valueOf(0xff16485b));
+        b.setMinWidth(0);b.setMinimumWidth(0);
+        return b;
+    }
+    private void installQuickControls(FrameLayout root){
+        LinearLayout top=new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        top.setPadding(dp(8),0,dp(8),0);
+        top.setBackgroundColor(0xbb06121c);
+        qualityButton=control("Qualidade");
+        languageButton=control("Idioma");
+        sourceButton=control("Fontes");
+        top.addView(qualityButton);top.addView(languageButton);top.addView(sourceButton);
+        FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(-2,dp(52),Gravity.TOP|Gravity.RIGHT);
+        params.topMargin=dp(6);params.rightMargin=dp(16);
+        root.addView(top,params);
+        qualityButton.setOnClickListener(v->showQualityOptions());
+        languageButton.setOnClickListener(v->showLanguageOptions());
+        sourceButton.setOnClickListener(v->showSourceOptions());
+        updateControls();
+    }
+    private void updateControls(){
+        if(queue||verified.isEmpty())return;
+        StreamProbe.Option o=verified.get(selectedIndex);
+        qualityButton.setText("Qualidade · "+o.quality);
+        languageButton.setText("Idioma · "+o.language);
+        sourceButton.setText("Fontes · "+verified.size());
+    }
+    private void showQualityOptions(){
+        LinkedHashMap<String,Integer> byQuality=new LinkedHashMap<>();
+        for(int i=0;i<verified.size();i++){
+            String quality=verified.get(i).quality;
+            if(!byQuality.containsKey(quality))byQuality.put(quality,i);
+        }
+        ArrayList<String> names=new ArrayList<>(byQuality.keySet());
+        // Same media with HLS/DASH often contains adaptive video tracks inside one URL.
+        names.add("Automática · adaptação à conexão");
+        new AlertDialog.Builder(this).setTitle("Qualidade disponível")
+            .setItems(names.toArray(new String[0]),(dialog,index)->{
+                if(index==names.size()-1){
+                    getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE)
+                        .edit().remove("quality").apply();
+                    if(player!=null)player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                        .buildUpon().setMaxVideoSize(Integer.MAX_VALUE,Integer.MAX_VALUE).build());
+                    Toast.makeText(this,"Qualidade automática",Toast.LENGTH_SHORT).show();return;
+                }
+                String chosen=names.get(index);
+                int target=byQuality.get(chosen);
+                getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE)
+                    .edit().putString("quality",chosen).apply();
+                if(target!=selectedIndex)switchSource(target,true);
+                int height=verified.get(target).qualityRank;
+                if(player!=null&&height>0){
+                    int width=(int)Math.round(height*16.0/9.0);
+                    player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                        .buildUpon().setMaxVideoSize(width,height).build());
+                }
+            }).setNegativeButton("Fechar",null).show();
+    }
+    private void showLanguageOptions(){
+        LinkedHashMap<String,Integer> byLanguage=new LinkedHashMap<>();
+        for(int i=0;i<verified.size();i++){
+            String language=verified.get(i).language;
+            if(!byLanguage.containsKey(language))byLanguage.put(language,i);
+        }
+        // Track-level languages inside one HLS/DASH/MP4 can differ from source labels.
+        final LinkedHashMap<String,String> audioTracks=new LinkedHashMap<>();
+        if(player!=null){
+            for(Tracks.Group group:player.getCurrentTracks().getGroups()){
+                if(group.getType()!=C.TRACK_TYPE_AUDIO)continue;
+                for(int i=0;i<group.length;i++){
+                    String language=group.getTrackFormat(i).language;
+                    if(language!=null&&!language.isEmpty()&&!"und".equals(language)){
+                        String nativeLabel=new Locale(language).getDisplayLanguage(new Locale("pt","BR"));
+                        audioTracks.put(language,nativeLabel);
                     }
-                }else if(state==Player.STATE_ENDED){
-                    markedFinished=true;
-                    save(true);
                 }
             }
-            @Override public void onMediaItemTransition(MediaItem mediaItem,int reason){
-                if(mediaItem==null)return;
-                String next=mediaItem.mediaId;
-                if(!next.equals(currentKey)){
-                    if(reason==Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && currentKey!=null&&startedCurrent){
+        }
+        ArrayList<String> choices=new ArrayList<>();
+        ArrayList<Runnable> handlers=new ArrayList<>();
+        for(Map.Entry<String,Integer> entry:byLanguage.entrySet()){
+            final String label=entry.getKey();
+            final int at=entry.getValue();
+            choices.add("Fonte · "+label);
+            handlers.add(()->{
+                getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE)
+                    .edit().putString("language",label).apply();
+                switchSource(at,true);
+            });
+        }
+        for(Map.Entry<String,String> item:audioTracks.entrySet()){
+            String language=item.getKey();
+            choices.add("Faixa de áudio · "+item.getValue());
+            handlers.add(()->{
+                if(player!=null)player.setTrackSelectionParameters(player.getTrackSelectionParameters()
+                    .buildUpon().setPreferredAudioLanguage(language).build());
+                Toast.makeText(this,"Áudio: "+item.getValue(),Toast.LENGTH_SHORT).show();
+            });
+        }
+        new AlertDialog.Builder(this).setTitle("Idioma disponível")
+            .setItems(choices.toArray(new String[0]),(dialog,index)->handlers.get(index).run())
+            .setNegativeButton("Fechar",null).show();
+    }
+    private void showSourceOptions(){
+        String[] labels=new String[verified.size()];
+        for(int i=0;i<verified.size();i++){
+            StreamProbe.Option o=verified.get(i);
+            labels[i]=(i==selectedIndex?"▶  ":"✓  ")+o.shortLabel()+
+                "  ·  "+o.label.replace('\n',' ').replace('\r',' ');
+        }
+        new AlertDialog.Builder(this).setTitle("Fontes com resposta HTTP válida")
+            .setItems(labels,(dialog,index)->switchSource(index,true))
+            .setNegativeButton("Voltar",null).show();
+    }
+    private void switchSource(int index,boolean fromUser){
+        if(queue||index<0||index>=verified.size())return;
+        if(index==selectedIndex&&player!=null)return;
+        long position=player==null?lastKnownPosition:Math.max(0,player.getCurrentPosition());
+        save(false);
+        selectedIndex=index;
+        failedSources.remove(verified.get(index).url);
+        playOption(index,position,fromUser);
+    }
+    private void playOption(int index,long position,boolean initiated){
+        StreamProbe.Option chosen=verified.get(index);
+        if(player!=null){
+            player.pause();
+            playerView.setPlayer(null);
+            player.release();
+            player=null;
+        }
+        startedCurrent=false;markedFinished=false;showingError=false;
+        // Media3 usually refuses cross-protocol 301 by default. Our probe already normalized
+        // the final URL. Allow HTTP->HTTPS redirection on header-free public streams.
+        DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory()
+            .setUserAgent("ShockTV/0.3.4 (Android TV)")
+            .setConnectTimeoutMs(6000).setReadTimeoutMs(12000);
+        Map<String,String> headers=new HashMap<>();
+        for(int i=0;i<chosen.headers.length&&i<chosen.values.length;i++){
+            String header=chosen.headers[i],value=chosen.values[i];
+            if(header==null||value==null||value.length()>2048||value.indexOf('\r')>=0||value.indexOf('\n')>=0)continue;
+            if(!"https://".equalsIgnoreCase(chosen.url.substring(0,Math.min(8,chosen.url.length())))
+                &&("Cookie".equalsIgnoreCase(header)||"Authorization".equalsIgnoreCase(header)))continue;
+            if("User-Agent".equalsIgnoreCase(header)||"Referer".equalsIgnoreCase(header)||
+                "Origin".equalsIgnoreCase(header)||"Accept".equalsIgnoreCase(header)||
+                "Authorization".equalsIgnoreCase(header)||"Cookie".equalsIgnoreCase(header))
+                headers.put(header,value);
+        }
+        if(!headers.isEmpty())http.setDefaultRequestProperties(headers);
+        boolean sensitive=headers.containsKey("Authorization")||headers.containsKey("Cookie");
+        http.setAllowCrossProtocolRedirects(!sensitive);
+        DefaultDataSource.Factory data=new DefaultDataSource.Factory(this,http);
+        player=new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
+        playerView.setPlayer(player);
+        player.addListener(new Player.Listener(){
+            @Override public void onPlaybackStateChanged(int state){
+                if(state==Player.STATE_READY&&!startedCurrent){
+                    startedCurrent=true;
+                    library.start(currentKey,currentUrl());
+                }else if(state==Player.STATE_ENDED){
+                    markedFinished=true;save(true);
+                }
+            }
+            @Override public void onPlayerError(PlaybackException error){
+                save(false);handlePlaybackError(error);
+            }
+            @Override public void onMediaItemTransition(MediaItem item,int reason){
+                if(item==null||item.mediaId.equals(currentKey))return;
+                if(startedCurrent){
+                    if(reason==Player.MEDIA_ITEM_TRANSITION_REASON_AUTO){
                         UserLibrary.Entry previous=library.get(currentKey);
                         library.progress(currentKey,previous.durationMs,previous.durationMs,true);
                     }else save(false);
-                    UserLibrary.Entry nextProgress=library.get(next);
-                    long nextPosition=nextProgress.canContinue()?nextProgress.positionMs:0L;
-                    currentKey=next;
-                    startedCurrent=false;
-                    markedFinished=false;
-                    if(nextPosition>=5000L)player.seekTo(nextPosition);
                 }
+                currentKey=item.mediaId;
+                UserLibrary.Entry next=library.get(currentKey);
+                long position=next.canContinue()?next.positionMs:0;
+                startedCurrent=false;markedFinished=false;
+                if(position>=5000)player.seekTo(position);
             }
         });
-        player.setMediaItems(items,0,restore);
+        ArrayList<MediaItem> items=new ArrayList<>();
+        if(queue){
+            for(int i=0;i<queuedUrls.length;i++){
+                if(!isMediaUrl(queuedUrls[i])||queuedKeys[i]==null||queuedKeys[i].isEmpty())continue;
+                UserLibrary.Entry record=library.get(queuedKeys[i]);
+                items.add(createItem(queuedUrls[i],queuedKeys[i],record.title,null));
+            }
+        }
+        if(items.isEmpty())items.add(createItem(chosen.url,currentKey,title,chosen.mime));
+        player.setMediaItems(items,0,Math.max(0,position));
+        String preference=getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("quality","");
+        if(!preference.isEmpty()&&chosen.qualityRank>0){
+            int h=chosen.qualityRank;
+            player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setMaxVideoSize((int)(16*h/9.0),h).build());
+        }
         player.prepare();player.play();
-        handler.postDelayed(periodic,SAVE_INTERVAL_MS);
-        view.requestFocus();
+        if(!queue)updateControls();
+        if(initiated)Toast.makeText(this,"Fonte: "+chosen.shortLabel(),Toast.LENGTH_SHORT).show();
     }
-
-    private static MediaItem createItem(String url,String key,String title){
-        MediaItem.Builder b=new MediaItem.Builder().setUri(url).setMediaId(key)
-            .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).build());
-        String suffix=url.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
-        if(suffix.endsWith(".m3u8"))b.setMimeType(MimeTypes.APPLICATION_M3U8);
-        else if(suffix.endsWith(".mpd"))b.setMimeType(MimeTypes.APPLICATION_MPD);
-        return b.build();
+    private static MediaItem createItem(String url,String key,String name,String mime){
+        MediaItem.Builder builder=new MediaItem.Builder().setUri(url).setMediaId(key)
+            .setMediaMetadata(new MediaMetadata.Builder().setTitle(name).build());
+        String ext=url.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
+        if("application/x-mpegURL".equals(mime)||ext.endsWith(".m3u8"))
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8);
+        else if("application/dash+xml".equals(mime)||ext.endsWith(".mpd"))
+            builder.setMimeType(MimeTypes.APPLICATION_MPD);
+        return builder.build();
     }
     private static boolean isMediaUrl(String url){
+        if(url==null)return false;
         try{
             java.net.URI uri=new java.net.URI(url);
-            return ("https".equalsIgnoreCase(uri.getScheme())||"http".equalsIgnoreCase(uri.getScheme()))
-                && uri.getHost()!=null;
-        }catch(Exception ex){return false;}
+            return uri.getHost()!=null&&
+                ("https".equalsIgnoreCase(uri.getScheme())||"http".equalsIgnoreCase(uri.getScheme()));
+        }catch(Exception e){return false;}
     }
     private String currentUrl(){
         if(player==null||player.getCurrentMediaItem()==null||
-            player.getCurrentMediaItem().localConfiguration==null)return "";
+           player.getCurrentMediaItem().localConfiguration==null)return "";
         return player.getCurrentMediaItem().localConfiguration.uri.toString();
     }
-    private void presentError(PlaybackException error){
-        if(showingError||isFinishing()||isDestroyed())return;
+    private void handlePlaybackError(PlaybackException error){
+        if(showingError||closing)return;
         int httpStatus=-1;
-        Throwable cause=error;
-        for(int i=0;cause!=null&&i<12;i++,cause=cause.getCause()){
+        for(Throwable cause=error;cause!=null;cause=cause.getCause()){
             if(cause instanceof HttpDataSource.InvalidResponseCodeException){
-                httpStatus=((HttpDataSource.InvalidResponseCodeException)cause).responseCode;
-                break;
+                httpStatus=((HttpDataSource.InvalidResponseCodeException)cause).responseCode;break;
+            }
+        }
+        if(!queue&&verified.size()>1){
+            failedSources.add(verified.get(selectedIndex).url);
+            int next=-1;
+            for(int i=0;i<verified.size();i++){
+                if(i!=selectedIndex&&!failedSources.contains(verified.get(i).url)){next=i;break;}
+            }
+            if(next>=0){
+                int remaining=verified.size()-failedSources.size();
+                Toast.makeText(this,"Fonte indisponível. Tentando outra ("+remaining+" restantes)…",
+                    Toast.LENGTH_LONG).show();
+                long resume=player==null?lastKnownPosition:Math.max(0,player.getCurrentPosition());
+                final int chosen=next;
+                handler.post(()->{
+                    selectedIndex=chosen;
+                    playOption(chosen,resume,false);
+                });
+                return;
             }
         }
         final int status=httpStatus;
         String explanation;
         switch(status){
-            case 401: explanation="O servidor exige autenticação.";break;
-            case 403: explanation="O servidor negou acesso. A URL pode estar expirada, restrita ou exigir autenticação.";break;
-            case 404:case 410: explanation="O arquivo não existe mais neste endereço.";break;
-            case 416: explanation="O servidor rejeitou a posição de retomada. Tente reproduzir do início.";break;
-            case 429: explanation="O servidor limitou o número de requisições. Tente novamente mais tarde.";break;
-            case 500:case 502:case 503:case 504:
-                explanation="O servidor de mídia está temporariamente indisponível.";break;
-            default:
-                if(status>0)explanation="O servidor recusou a reprodução.";
-                else if(error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
-                    ||error.errorCode==PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED)
-                    explanation="A URL não retornou uma mídia válida ou o formato está incorreto.";
-                else explanation="Não foi possível abrir ou decodificar esta mídia.";
+            case 301:case 302:case 307:case 308:
+                explanation="A fonte mudou de endereço e o redirecionamento não pôde ser concluído.";break;
+            case 401: explanation="A fonte exige autenticação.";break;
+            case 403: explanation="A fonte negou acesso. O endereço pode ter expirado.";break;
+            case 404:case 410: explanation="A mídia não existe mais no servidor.";break;
+            case 416: explanation="O servidor rejeitou a retomada do vídeo.";break;
+            case 429: explanation="O servidor limitou as requisições. Tente mais tarde.";break;
+            case 500:case 502:case 503:case 504: explanation="Servidor de mídia indisponível.";break;
+            default: explanation=status>0?"O servidor recusou a requisição.":"Mídia incompatível ou erro de conexão.";
         }
-        String diagnostic=status>0?"Resposta HTTP "+status:"Código "+error.getErrorCodeName();
-        Log.w("ShockTV-Player","Falha de reprodução: "+diagnostic+"; "+error.getErrorCodeName());
+        Log.w(TAG,"Falha no player: HTTP "+status+" / "+error.getErrorCodeName());
         showingError=true;
         new AlertDialog.Builder(this).setTitle("Não foi possível reproduzir")
-            .setMessage(explanation+"\n\n"+diagnostic+
-                "\n\nEscolha outra fonte do addon ou tente novamente. O Shock TV não marcará esta tentativa como vídeo assistido.")
-            .setPositiveButton("Tentar novamente",(dialog,which)->{
-                showingError=false;startedCurrent=false;markedFinished=false;
-                if(player!=null){
-                    if(status==416)player.seekTo(0L);
-                    player.prepare();player.play();
-                }
-            })
-            .setNegativeButton("Escolher outra fonte",(dialog,which)->{
-                showingError=false;finish();
-            })
-            .setOnCancelListener(d->{showingError=false;finish();})
-            .show();
+          .setMessage(explanation+"\n\n"+
+            (status>0?"HTTP "+status:error.getErrorCodeName())+
+            "\n\nNenhum vídeo foi marcado como assistido se não chegou a carregar.")
+          .setPositiveButton("Tentar novamente",(d,w)->{
+              showingError=false;failedSources.clear();
+              long pos=status==416?0:Math.max(0,lastKnownPosition);
+              playOption(selectedIndex,pos,true);
+          })
+          .setNegativeButton("Voltar ao título",(d,w)->{closing=true;finish();})
+          .setOnCancelListener(d->{closing=true;finish();})
+          .show();
     }
-    private void save(boolean ended){
+    private void save(boolean completed){
         if(!startedCurrent||player==null||library==null||currentKey==null)return;
         long position=player.getCurrentPosition(),duration=player.getDuration();
         if(position<0||position==C.TIME_UNSET)position=0;
         if(duration<=0||duration==C.TIME_UNSET)duration=0;
-        library.progress(currentKey,position,duration,ended||markedFinished);
+        lastKnownPosition=position;
+        library.progress(currentKey,position,duration,completed||markedFinished);
     }
     @Override protected void onPause(){
         save(false);
@@ -230,6 +423,7 @@ public final class PlayerActivity extends Activity {
     }
     @Override protected void onStop(){save(false);super.onStop();}
     @Override protected void onDestroy(){
+        closing=true;
         handler.removeCallbacks(periodic);
         save(false);
         if(player!=null){player.release();player=null;}
