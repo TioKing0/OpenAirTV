@@ -107,3 +107,19 @@ O app agora possui um banner real 320×180 px com o nome Shock TV e ícone 192×
 O GitHub Actions verifica a presença do banner gerado e usa `aapt dump badging` para confirmar que o pacote contém uma atividade lançável pela Android TV. Isso corrige a identificação do APK no menu **Apps**; por decisão do launcher, o usuário ainda pode precisar adicionar o app à fileira de favoritos/home manualmente. Não é possível obrigar launchers de terceiros a fixar um app automaticamente.
 
 Assinatura: este APK ainda é uma compilação de avaliação, e trocas da assinatura debug podem impedir atualizações in-place. Para evitar perda das preferências de fontes, histórico e curtidos, é essencial preparar a assinatura de lançamento estável antes de distribuir a versão comercial.
+
+## Android TV V0.3.6 — Busca integrada e player limpo
+
+Esta versão contém **as duas melhorias combinadas**, sem alterar o motor inteligente de streams da V0.3.5.
+
+- Nova aba Buscar nativa da TV: entrada por teclado remoto, submissão via botão "Pesquisar" e atualização automática após pausa ao digitar.
+- Pesquisa `/catalog/{type}/{id}/search={query}.json` em cada addon ativo que anuncia `extra.search`, respeitando as capacidades do manifesto Stremio. Busca títulos além da primeira página dos catálogos exibidos na Home.
+- Exibição de resultados reais, capas e sinopses, deduplicados por `type|id`, ordenados por semelhança. Filtros Tudo/Filmes/Séries sem nova requisição. Respostas inválidas não quebram a navegação.
+- Proteção contra buscas obsoletas, execução separada da fila de capas e limite de até cinco catálogos por addon em cada pesquisa.
+- No player, os botões Qualidade, Idioma e Fontes **desaparecem após 5 segundos**, assim como os controles padrão do Media3. Com o controle remoto, seta para cima abre as opções e coloca o foco no primeiro botão; Menu/Info faz o mesmo.
+- OK quando não há menu visível controla play/pause, esquerda/direita buscam 10 segundos quando a interface de controles está oculta. Voltar esconde os controles primeiro e sai do player numa segunda ação.
+- Os menus de qualidade, idioma e fontes mantêm os controles acessíveis enquanto estão abertos. A seleção de fontes, histórico, addons e preferências existentes permanece.
+
+A pesquisa retorna somente os conteúdos disponíveis nas fontes conectadas. A existência de um resultado no catálogo não garante que haja stream reproduzível. Como esta é uma build de avaliação, é necessário validar a experiência na Android TV real antes de tratá-la como versão estável.
+
+Protocolo de pesquisa: https://stremio.github.io/stremio-addon-sdk/protocol.html

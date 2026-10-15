@@ -68,6 +68,8 @@ public final class MainActivity extends Activity {
         "ThePirateBay+ • Busca de streams"
     };
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
+    private final ExecutorService searchExecutor=Executors.newSingleThreadExecutor();
+    private java.util.concurrent.Future<?> searchFuture;
     private final ArrayList<String> sources=new ArrayList<>();
     private final Set<String> disabledBundled=new HashSet<>();
     private final LinkedHashMap<String,JSONObject> manifestCache =
@@ -522,6 +524,7 @@ public final class MainActivity extends Activity {
     }
     private void refreshCatalogRows(){
         if(catalogArea==null||showingDetails)return;
+        if("buscar".equals(activeSection))return; // Don't erase the search page while catalogs load.
         catalogArea.removeAllViews();
         updateSpotlight();
         if("minha".equals(activeSection))return;
@@ -909,14 +912,18 @@ public final class MainActivity extends Activity {
         searchPanel.addView(filters,filterLp);
         String[] types={"all","movie","series"};
         String[] labels={"Tudo","Filmes","Séries"};
+        final Button[] filterButtons=new Button[types.length];
         for(int i=0;i<types.length;i++){
             final String type=types[i];
+            final int choice=i;
             Button filter=button((type.equals(searchFilter)?"●  ":"○  ")+labels[i],()->{
                 if(searchFilter.equals(type))return;
                 searchFilter=type;
-                // Change filter locally: no repeated provider requests or lost query.
+                for(int k=0;k<filterButtons.length;k++)
+                    filterButtons[k].setText((types[k].equals(searchFilter)?"●  ":"○  ")+labels[k]);
                 buildSearchResults();
             });
+            filterButtons[i]=filter;
             filters.addView(filter);
         }
         searchFeedback=text("Use o teclado da TV para pesquisar títulos reais.",14,0xff9bb9c7,false);
@@ -948,6 +955,7 @@ public final class MainActivity extends Activity {
         pendingSearch=null;
         searchText=normalized;
         searchGeneration++;
+        if(searchFuture!=null)searchFuture.cancel(true);
         final int token=searchGeneration;
         searchMatches.clear();
         if(searchResultsArea==null||!"buscar".equals(activeSection))return;
@@ -968,20 +976,20 @@ public final class MainActivity extends Activity {
         buildSearchResults();
         final ArrayList<String> providers=new ArrayList<>(sources);
         // Search endpoints belong to catalog resources whose manifest declares the search extra.
-        pool.execute(()->{
+        searchFuture=searchExecutor.submit(()->{
             int checked=0,failed=0,supported=0;
             for(String addon:providers){
                 if(token!=searchGeneration||Thread.currentThread().isInterrupted())break;
                 try{
                     JSONObject manifest=getManifest(addon);
-                    if(!supportsResource(manifest,"catalog","movie","")&&
-                       !supportsResource(manifest,"catalog","series",""))continue;
+                    // Search is authorized by each catalog's declared "search" extra,
+                    // not by resource idPrefixes (search has no item ID yet).
                     JSONArray catalogs=manifest.optJSONArray("catalogs");
                     if(catalogs==null)continue;
                     String root=addon.substring(0,addon.length()-"manifest.json".length());
                     int addonChecked=0;
-                    for(int c=0;c<catalogs.length()&&addonChecked<8;c++){
-                        if(token!=searchGeneration)break;
+                    for(int c=0;c<catalogs.length()&&addonChecked<5;c++){
+                        if(token!=searchGeneration||Thread.currentThread().isInterrupted())break;
                         JSONObject catalog=catalogs.optJSONObject(c);if(catalog==null)continue;
                         String type=catalog.optString("type","");
                         String id=catalog.optString("id","");
@@ -1457,6 +1465,8 @@ public final class MainActivity extends Activity {
     @Override protected void onResume(){super.onResume();if(personal!=null)showPersonal();}
     @Override protected void onDestroy(){
         searchGeneration++;
+        if(searchFuture!=null)searchFuture.cancel(true);
+        searchExecutor.shutdownNow();
         if(pendingSearch!=null)ui.removeCallbacks(pendingSearch);
         if(pendingSearchRender!=null)ui.removeCallbacks(pendingSearchRender);
         pool.shutdownNow();
