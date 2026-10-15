@@ -156,6 +156,9 @@ public final class MainActivity extends Activity {
         catalogArea=new LinearLayout(this);
         catalogArea.setOrientation(LinearLayout.VERTICAL);
         content.addView(catalogArea,new LinearLayout.LayoutParams(-1,-2));
+        subtitle=text("Catálogos conectados: "+sources.size(),12,0xff7994a8,false);
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(30);
+        content.addView(subtitle,sp);
 
         if("inicio".equals(activeSection)||"minha".equals(activeSection))showPersonal();
         updateSpotlight();
@@ -380,9 +383,10 @@ public final class MainActivity extends Activity {
         if(items.isEmpty())return;
         addCatalog(title,items);
     }
-    private ArrayList<Media> matching(java.util.function.Predicate<Media> condition){
+    private interface MediaFilter{boolean matches(Media media);}
+    private ArrayList<Media> matching(MediaFilter condition){
         ArrayList<Media> list=new ArrayList<>();
-        for(Media m:knownItems)if(condition.test(m))list.add(m);
+        for(Media m:knownItems)if(condition.matches(m))list.add(m);
         return list;
     }
     private void refreshCatalogRows(){
@@ -393,8 +397,8 @@ public final class MainActivity extends Activity {
         Set<String> shown=new HashSet<>();
         if("filmes".equals(activeSection)||"series".equals(activeSection)){
             boolean movie="filmes".equals(activeSection);
-            java.util.function.Predicate<Media> type=m->movie?isFilm(m):isSeries(m);
-            addRowFrom("Em alta",matching(m->type.test(m)&&!m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
+            MediaFilter type=m->movie?isFilm(m):isSeries(m);
+            addRowFrom("Em alta",matching(m->type.matches(m)&&!m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
             String[] genres={"Ação","Comédia","Drama","Suspense","Terror","Animação","Ficção científica","Documentário","Romance"};
             String[] words={"action","comedy","drama","thriller","horror","animation","sci-fi","documentary","romance"};
             for(int i=0;i<genres.length;i++){
@@ -519,13 +523,20 @@ public final class MainActivity extends Activity {
     private void showPersonal(){
         if(personal==null||library==null)return;
         personal.removeAllViews();
-        addPersonalRow("CONTINUAR ASSISTINDO","continue","Nenhum vídeo interrompido.");
-        addPersonalRow("ASSISTIR MAIS TARDE","later","Sua lista está vazia.");
-        addPersonalRow("CURTIDOS  ♥","liked","Marque seus favoritos no catálogo.");
-        addPersonalRow("ASSISTIDOS RECENTEMENTE","recent","Seu histórico começa quando você reproduz um vídeo.");
+        addPersonalRow("Continuar assistindo","continue","");
+        addPersonalRow("Assistir mais tarde","later","");
+        addPersonalRow("Seus favoritos","liked","");
+        if("minha".equals(activeSection))addPersonalRow("Assistidos recentemente","recent","");
+        if("minha".equals(activeSection)&&library.list("continue").isEmpty()
+            &&library.list("later").isEmpty()&&library.list("liked").isEmpty()
+            &&library.list("recent").isEmpty()){
+            TextView intro=text("Sua biblioteca ainda está vazia. Explore os catálogos e marque títulos para guardar aqui.",16,0xffb0cad6,false);
+            intro.setPadding(dp(3),dp(18),dp(10),dp(18));personal.addView(intro);
+        }
     }
     private void addPersonalRow(String title,String filter,String empty){
         ArrayList<UserLibrary.Entry> entries=library.list(filter);
+        if(entries.isEmpty())return;
         LinearLayout line=new LinearLayout(this);line.setGravity(Gravity.CENTER_VERTICAL);
         TextView heading=text(title,16,AQUA,true);
         line.addView(heading,new LinearLayout.LayoutParams(0,dp(44),1f));
