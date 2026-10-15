@@ -454,16 +454,41 @@ public final class MainActivity extends Activity {
         row.addView(items);
         block.addView(row,new LinearLayout.LayoutParams(-1,dp(278)));
     }
+    /** Sample poster bitmaps at TV-card resolution. Keep a small cache to avoid OOM on low-memory TVs. */
     private void loadPoster(String url,ImageView image){
+        Bitmap cached=artwork.get(url);
+        if(cached!=null){image.setImageBitmap(cached);return;}
         pool.execute(()->{
-            try {
-                HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
-                c.setConnectTimeout(7000);c.setReadTimeout(8000);
-                try(InputStream in=c.getInputStream()){
-                    Bitmap bmp=BitmapFactory.decodeStream(in);
-                    if(bmp!=null)runOnUiThread(()->image.setImageBitmap(bmp));
-                }finally{c.disconnect();}
-            }catch(Exception ignored){}
+            HttpURLConnection connection=null;
+            try{
+                connection=(HttpURLConnection)new URL(url).openConnection();
+                connection.setConnectTimeout(5500);connection.setReadTimeout(6500);
+                connection.setRequestProperty("Accept","image/webp,image/jpeg,image/png");
+                if(connection.getContentLength()>2500000)throw new Exception("Poster too large");
+                byte[] bytes;
+                try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                    byte[] buffer=new byte[8192];int n;
+                    while((n=in.read(buffer))!=-1){
+                        out.write(buffer,0,n);
+                        if(out.size()>2500000)throw new Exception("Poster limit exceeded");
+                    }
+                    bytes=out.toByteArray();
+                }
+                BitmapFactory.Options bounds=new BitmapFactory.Options();
+                bounds.inJustDecodeBounds=true;
+                BitmapFactory.decodeByteArray(bytes,0,bytes.length,bounds);
+                int step=1;
+                while(bounds.outWidth/step>420||bounds.outHeight/step>620)step*=2;
+                BitmapFactory.Options sample=new BitmapFactory.Options();
+                sample.inSampleSize=step;sample.inPreferredConfig=Bitmap.Config.RGB_565;
+                Bitmap bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.length,sample);
+                if(bitmap!=null){
+                    artwork.put(url,bitmap);
+                    runOnUiThread(()->{
+                        if(image.isAttachedToWindow())image.setImageBitmap(bitmap);
+                    });
+                }
+            }catch(Exception ignored){}finally{if(connection!=null)connection.disconnect();}
         });
     }
     /** All daily actions are available using the D-pad, without separate screens or fake buttons. */
@@ -480,38 +505,108 @@ public final class MainActivity extends Activity {
         m.description=e.description;m.source=e.source;m.episodeId=e.episodeId;
         return m;
     }
+    /** Full-screen title details instead of system alert dialogs. */
     private void details(Media m){
-        final UserLibrary.Entry e=identify(m);
-        final ArrayList<String> options=new ArrayList<>();
-        options.add("▶  Escolher reprodução / episódio");
-        if(e.canContinue() && !e.streamUrl.isEmpty())options.add("↻  Continuar de "+e.progressLabel().replace("Pausado em ",""));
-        if(e.canContinue() && !e.streamUrl.isEmpty())options.add("⟲  Recomeçar do início");
-        options.add(e.liked?"♥  Remover dos curtidos":"♡  Adicionar aos curtidos");
-        options.add(e.watchLater?"✓  Remover de Assistir mais tarde":"◷  Assistir mais tarde");
-        if(e.lastPlayed>0)options.add("⌫  Remover do histórico");
-        options.add("ⓘ  Informações do título");
-        new AlertDialog.Builder(this).setTitle(m.name)
-          .setItems(options.toArray(new String[0]),(dialog,which)->{
-             String choice=options.get(which);
-             if(choice.startsWith("▶"))resolveItem(m);
-             else if(choice.startsWith("↻"))resumeEntry(library.get(e.key));
-             else if(choice.startsWith("⟲")){
-                 UserLibrary.Entry fresh=library.get(e.key);
-                 play(fresh.streamUrl,fromSaved(fresh),fresh.episodeId,true);
-             }
-             else if(choice.startsWith("♥")||choice.startsWith("♡")){
-                 library.liked(e.key,!library.get(e.key).liked);
-                 showPersonal();Toast.makeText(this,"Lista de curtidos atualizada",Toast.LENGTH_SHORT).show();
-             }else if(choice.startsWith("✓")||choice.startsWith("◷")){
-                 library.later(e.key,!library.get(e.key).watchLater);
-                 showPersonal();Toast.makeText(this,"Assistir mais tarde atualizado",Toast.LENGTH_SHORT).show();
-             }else if(choice.startsWith("⌫")){
-                 library.removeHistory(e.key);showPersonal();
-                 Toast.makeText(this,"Título removido do histórico",Toast.LENGTH_SHORT).show();
-             }else{
-                 message((m.description==null?"":m.description)+"\n\n"+library.get(e.key).progressLabel());
-             }
-          }).setNegativeButton("Voltar",null).show();
+        UserLibrary.Entry entry=identify(m);
+        if(browseRoot==null)return;
+        browseOffset=browseScroll==null?0:browseScroll.getScrollY();
+        showingDetails=true;
+        ScrollView page=new ScrollView(this);
+        page.setBackgroundColor(BG);
+        page.setFillViewport(true);
+        LinearLayout outer=new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setPadding(dp(40),dp(23),dp(40),dp(45));
+        page.addView(outer);
+        Button back=button("←  Voltar",()->returnToBrowse());
+        outer.addView(back);
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);
+        rowParams.topMargin=dp(26);outer.addView(row,rowParams);
+
+        ImageView artworkView=new ImageView(this);
+        artworkView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        artworkView.setBackground(shape(0xff213748,0));
+        row.addView(artworkView,new LinearLayout.LayoutParams(dp(238),dp(351)));
+        if(m.poster!=null&&m.poster.startsWith("https://"))loadPoster(m.poster,artworkView);
+
+        LinearLayout right=new LinearLayout(this);right.setOrientation(LinearLayout.VERTICAL);
+        right.setPadding(dp(36),0,dp(5),0);
+        row.addView(right,new LinearLayout.LayoutParams(0,-2,1f));
+        right.addView(text(("series".equals(m.type)?"SÉRIE":"movie".equals(m.type)?"FILME":"TV")+"  ·  SHOCK TV",12,AQUA,true));
+        TextView title=text(m.name,36,Color.WHITE,true);title.setMaxLines(3);
+        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.topMargin=dp(9);right.addView(title,tp);
+        if(m.genre!=null&&!m.genre.isEmpty()){
+            TextView genres=text(m.genre.replace(",", "  •  "),13,0xff90bbca,false);
+            genres.setMaxLines(2);right.addView(genres);
+        }
+        TextView desc=text(m.description==null||m.description.isEmpty()?
+                "Sinopse indisponível para este título.":m.description,16,0xffd1dfe6,false);
+        desc.setMaxLines(8);
+        LinearLayout.LayoutParams dp2=new LinearLayout.LayoutParams(-1,-2);dp2.topMargin=dp(20);
+        right.addView(desc,dp2);
+
+        LinearLayout primary=new LinearLayout(this);
+        primary.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actions=new LinearLayout.LayoutParams(-1,-2);actions.topMargin=dp(24);
+        right.addView(primary,actions);
+        primary.addView(button(entry.canContinue()&&entry.streamUrl!=null&&!entry.streamUrl.isEmpty()?
+             "▶  Continuar":"▶  Ver opções de reprodução",()->{
+                 UserLibrary.Entry current=library.get(entry.key);
+                 if(current.canContinue() && !current.streamUrl.isEmpty())resumeEntry(current);
+                 else resolveItem(m);
+             }));
+        if(entry.canContinue()&&!entry.streamUrl.isEmpty())
+            primary.addView(button("⟲  Recomeçar",()->{
+                UserLibrary.Entry current=library.get(entry.key);
+                play(current.streamUrl,fromSaved(current),current.episodeId,true);
+            }));
+
+        LinearLayout secondary=new LinearLayout(this);
+        secondary.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actions2=new LinearLayout.LayoutParams(-1,-2);actions2.topMargin=dp(11);
+        right.addView(secondary,actions2);
+        Button later=button(entry.watchLater?"✓  Na minha lista":"＋  Assistir mais tarde",()->{
+            UserLibrary.Entry current=library.get(entry.key);
+            library.later(entry.key,!current.watchLater);
+            laterButtonRefresh(entry.key);
+            showPersonal();
+        });
+        secondary.addView(later);
+        Button liked=button(entry.liked?"♥  Curtido":"♡  Curtir",()->{
+            UserLibrary.Entry current=library.get(entry.key);
+            library.liked(entry.key,!current.liked);
+            laterButtonRefresh(entry.key);
+            showPersonal();
+        });
+        secondary.addView(liked);
+        // Save handles so the buttons reflect each change while staying on the detail page.
+        detailLaterButton=later;detailLikeButton=liked;
+        UserLibrary.Entry updated=library.get(entry.key);
+        if(updated.lastPlayed>0){
+            TextView checkpoint=text(updated.progressLabel(),13,0xffa4c3d0,false);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=dp(16);
+            right.addView(checkpoint,cp);
+        }
+        setContentView(page);
+        back.requestFocus();
+    }
+    private Button detailLaterButton,detailLikeButton;
+    private void laterButtonRefresh(String key){
+        UserLibrary.Entry e=library.get(key);
+        if(detailLaterButton!=null)detailLaterButton.setText(e.watchLater?"✓  Na minha lista":"＋  Assistir mais tarde");
+        if(detailLikeButton!=null)detailLikeButton.setText(e.liked?"♥  Curtido":"♡  Curtir");
+    }
+    private void returnToBrowse(){
+        if(!showingDetails)return;
+        showingDetails=false;
+        setContentView(browseRoot);
+        if(browseScroll!=null)browseScroll.post(()->browseScroll.scrollTo(0,browseOffset));
+        scheduleRefresh();
+    }
+    @Override public void onBackPressed(){
+        if(showingDetails){returnToBrowse();return;}
+        super.onBackPressed();
     }
     private void resumeEntry(UserLibrary.Entry e){
         if(e.streamUrl!=null && (e.streamUrl.startsWith("http://")||e.streamUrl.startsWith("https://"))){
