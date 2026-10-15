@@ -979,19 +979,15 @@ public final class MainActivity extends Activity {
         return URLEncoder.encode(value,"UTF-8").replace("+","%20");
     }
     /** Query stream resource only from addons which declare stream capability. */
-    /** Manifest stream entries are candidates, not proof of a working HTTP media response. */
-    private static final class StreamCandidate {
-        String url="",label="";
-        String[] headerNames=new String[0],headerValues=new String[0];
-    }
+    /** Collect candidates, probe their HTTP responses, then start the best reachable option. */
     private void resolveStreams(Media media,String videoId) {
-        if(subtitle!=null)subtitle.setText("Consultando fontes de reprodução…");
+        if(subtitle!=null)subtitle.setText("Encontrando uma reprodução disponível…");
         pool.execute(()->{
-            ArrayList<StreamCandidate> candidates=new ArrayList<>();
+            ArrayList<StreamProbe.Option> candidates=new ArrayList<>();
             Set<String> seen=new HashSet<>();
-            int torrentOnly=0,externalOnly=0,invalid=0,providersFailed=0;
+            int torrents=0,external=0,bad=0,failed=0;
             for(String manifestUrl:new ArrayList<>(sources)){
-                try {
+                try{
                     JSONObject manifest=getManifest(manifestUrl);
                     if(!supportsStreams(manifest,media.type,videoId))continue;
                     String root=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
@@ -999,69 +995,65 @@ public final class MainActivity extends Activity {
                     JSONArray streams=response.optJSONArray("streams");
                     if(streams==null)continue;
                     for(int i=0;i<streams.length()&&i<60;i++){
-                        JSONObject stream=streams.optJSONObject(i);
-                        if(stream==null)continue;
+                        JSONObject stream=streams.optJSONObject(i);if(stream==null)continue;
                         String url=stream.optString("url","");
                         if(!isHttpMediaCandidate(url)){
-                            if(!stream.optString("infoHash","").isEmpty())torrentOnly++;
-                            else if(!stream.optString("externalUrl","").isEmpty()
-                                  ||!stream.optString("ytId","").isEmpty())externalOnly++;
-                            else invalid++;
+                            if(!stream.optString("infoHash","").isEmpty())torrents++;
+                            else if(!stream.optString("externalUrl","").isEmpty()||
+                                    !stream.optString("ytId","").isEmpty())external++;
+                            else bad++;
                             continue;
                         }
-                        // Multiple entries with the same URL may require distinct request headers.
                         JSONObject hints=stream.optJSONObject("behaviorHints");
                         JSONObject request=null;
                         if(hints!=null){
                             JSONObject proxy=hints.optJSONObject("proxyHeaders");
                             if(proxy!=null)request=proxy.optJSONObject("request");
                         }
-                        StreamCandidate c=new StreamCandidate();
-                        c.url=url;
                         ArrayList<String> names=new ArrayList<>(),values=new ArrayList<>();
                         if(request!=null){
                             String[] allowed={"User-Agent","Referer","Origin","Accept","Authorization","Cookie"};
-                            for(String allowedName:allowed){
-                                String value=request.optString(allowedName,"");
+                            for(String name:allowed){
+                                String value=request.optString(name,"");
                                 if(value.isEmpty()||value.length()>2048||value.indexOf('\r')>=0||value.indexOf('\n')>=0)continue;
-                                names.add(allowedName);values.add(value);
+                                names.add(name);values.add(value);
                             }
                         }
-                        c.headerNames=names.toArray(new String[0]);
-                        c.headerValues=values.toArray(new String[0]);
-                        String dedupe=url+"|"+names.toString()+"|"+values.toString();
-                        if(!seen.add(dedupe))continue;
-                        String label=stream.optString("name","Reprodução");
-                        String detail=stream.optString("description",stream.optString("title",""));
-                        c.label=manifest.optString("name","Addon")+"  •  "+label+(detail.isEmpty()?"":"  •  "+detail);
-                        candidates.add(c);
+                        String signature=url+"|"+names.toString()+"|"+values.toString();
+                        if(!seen.add(signature))continue;
+                        String label=stream.optString("name","Stream");
+                        String details=stream.optString("description",stream.optString("title",""));
+                        String displayed=manifest.optString("name","Addon")+" • "+label+
+                            (details.isEmpty()?"":" • "+details);
+                        candidates.add(StreamProbe.candidate(url,displayed,
+                            names.toArray(new String[0]),values.toArray(new String[0])));
                     }
                 }catch(Exception ex){
-                    providersFailed++;
-                    android.util.Log.w("ShockTV-Addon","Falha ao consultar streams de "+safeHost(manifestUrl)+": "+ex.getClass().getSimpleName());
+                    failed++;
+                    android.util.Log.w("ShockTV-Addon","Falha na busca de streams: "+safeHost(manifestUrl));
                 }
             }
-            final int torrents=torrentOnly,external=externalOnly,bad=invalid,failed=providersFailed;
+            final int skippedTorrents=torrents,skippedExternal=external,skippedBad=bad,failedAddons=failed;
+            final int candidateCount=candidates.size();
+            // Bounded concurrency and a short-range GET: an HTTP success is preliminary, not proof of decodability.
+            StreamProbe.Report checked=StreamProbe.verify(candidates);
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
-                if(candidates.isEmpty()){
-                    String reason=torrents>0?
-                        "Os addons retornaram "+torrents+" opção(ões) BitTorrent, que não são URLs de mídia HTTP(S). Nosso player ainda não tem motor BitTorrent."
-                        :"Nenhuma URL de mídia HTTP(S) foi fornecida para este título.";
-                    message(reason+"\n\nLinks externos: "+external+" • Respostas inválidas: "+bad+
-                      " • Provedores indisponíveis: "+failed+
-                      "\nA existência do catálogo não garante que o título possa ser reproduzido.");
+                if(checked.available.isEmpty()){
+                    String detail=candidateCount>0
+                        ?"Nenhuma das "+Math.min(candidateCount,24)+" URLs verificadas respondeu como mídia HTTP válida."
+                        :"Nenhuma URL direta foi fornecida pelos addons ativos.";
+                    message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent não são compatíveis com este player."
+                        +"\nLinks externos: "+skippedExternal+" • Outras entradas: "+skippedBad+
+                        " • Addons que falharam: "+failedAddons+
+                        "\n\nTente outra fonte ou outro título.");
                     return;
                 }
-                String[] choices=new String[candidates.size()];
-                for(int i=0;i<choices.length;i++)choices[i]=candidates.get(i).label;
-                new AlertDialog.Builder(this).setTitle(media.name+" • "+candidates.size()+" URL(s) de mídia")
-                   .setItems(choices,(dialog,index)->{
-                       StreamCandidate c=candidates.get(index);
-                       play(c.url,media,videoId,false,c.headerNames,c.headerValues);
-                   })
-                   .setNegativeButton("Voltar",null).show();
+                StreamProbe.Option best=checked.available.get(0);
+                Toast.makeText(this,checked.available.size()+" opção(ões) HTTP verificadas · "+
+                     best.shortLabel(),Toast.LENGTH_LONG).show();
+                play(best.url,media,videoId,false,best.headers,best.values,checked.toJson().toString());
             });
         });
     }
@@ -1122,6 +1114,9 @@ public final class MainActivity extends Activity {
         play(url,m,videoId,restart,new String[0],new String[0]);
     }
     private void play(String url,Media m,String videoId,boolean restart,String[] headerNames,String[] headerValues){
+        play(url,m,videoId,restart,headerNames,headerValues,null);
+    }
+    private void play(String url,Media m,String videoId,boolean restart,String[] headerNames,String[] headerValues,String verifiedOptions){
         if(url==null||!(url.startsWith("http://")||url.startsWith("https://"))){
             message("Esta fonte não tem um endereço de mídia reproduzível.");return;
         }
@@ -1137,6 +1132,7 @@ public final class MainActivity extends Activity {
         intent.putExtra("source",m.source);intent.putExtra("episodeId",m.episodeId);
         intent.putExtra("libraryKey",key);intent.putExtra("restart",restart);
         intent.putExtra("streamHeaderNames",headerNames);intent.putExtra("streamHeaderValues",headerValues);
+        if(verifiedOptions!=null)intent.putExtra("verifiedStreamOptions",verifiedOptions);
         startActivity(intent);
     }
     private void message(String text){new AlertDialog.Builder(this).setTitle("Shock TV").setMessage(text).setPositiveButton("OK",null).show();}
