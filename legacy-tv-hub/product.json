@@ -1,7 +1,7 @@
 {
   "name": "Legacy TV Hub",
-  "version": "0.1.1",
-  "androidVersionCode": 2,
+  "version": "0.1.2",
+  "androidVersionCode": 3,
   "androidApplicationId": "br.com.legacytvhub.manager",
   "orsayWidgetId": "LegacyTVHub"
 }
