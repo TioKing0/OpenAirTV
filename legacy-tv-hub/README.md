@@ -1,34 +1,24 @@
-# Legacy TV Hub V0.1
+# Legacy TV Hub V0.1.1 (Orsay / Samsung J4300)
 
-Código isolado na branch **legacy-tv-hub-v0.1** do repositório OpenAirTV. A branch principal e o código do OpenAirTV não são modificados.
+Android `br.com.legacytvhub.manager` + Samsung widget `LegacyTVHub`. Mantemos o MESMO identificador para atualizar; não existe um aplicativo separado de diagnóstico.
 
-## Um aplicativo, atualizações sucessivas
+## Correção do erro EACCES do Android
 
-- Identificador permanente Android: `br.com.legacytvhub.manager`
-- Identificador permanente Samsung Orsay: `LegacyTVHub`
-- Versão inicial `0.1.0`, `androidVersionCode: 1`.
-- O diagnóstico de controles integra o próprio widget. Não existe aplicativo separado de teste.
-- Novas releases precisam manter o `applicationId`, a **mesma assinatura Android** e aumentar o `androidVersionCode`.
-- A Samsung Orsay pode manter o widget pelo mesmo ID, mas substituição e preservação de dados dependem de testes na TV real.
+A sincronização IP do Smart Hub Orsay tradicional exige a porta HTTP **80**. Android sem root não permite normalmente criar um servidor local nessa porta. O app agora inicia o diagnóstico na porta **8080** sem root e deixa explícito que isso **não instala o widget pelo Smart Hub**.
 
-## GitHub Actions
+## Instalação por USB (a validar na J4300)
 
-O workflow `.github/workflows/legacy-tv-hub.yml` é separado do workflow original do OpenAirTV. Pushes nesta branch compilam o código Android e validam o pacote Orsay. **Não são distribuídos APKs de debug** porque uma assinatura temporária não garante atualização sobre a mesma instalação.
+A opção **Exportar pacote Orsay para USB** gera um ZIP contendo uma única pasta chamada `LegacyTVHub`, que contém `config.xml`, `index.html`, `widget.info` e arquivos auxiliares. Extraia a pasta `LegacyTVHub` para a raiz de um pendrive FAT32 (não a deixe dentro de outra pasta, nem troque para o formato de pacotes Tizen `userwidget`). Conecte o pendrive à TV e procure o widget no Smart Hub.
 
-O workflow gera APK de release instalável quando o GitHub tiver a chave permanente via quatro repository secrets:
+Essa alternativa é documentada para algumas TVs Orsay, mas seu sucesso, a persistência após remover o pendrive e a atualização sobre a instalação anterior **ainda exigem teste físico no modelo UN32J4300AGXZD**.
 
-- `LEGACY_TV_HUB_KEYSTORE_B64`: chave `.jks` codificada com base64.
-- `LEGACY_TV_HUB_STORE_PASSWORD`: senha do keystore.
-- `LEGACY_TV_HUB_KEY_ALIAS`: alias.
-- `LEGACY_TV_HUB_KEY_PASSWORD`: senha da chave.
+O Android pode exportar o arquivo para o próprio armazenamento ou para um pendrive OTG (quando disponível). Não formata pendrives, não faz root e não usa servidores externos.
 
-Crie uma chave **uma única vez** e guarde cópia segura fora do GitHub:
-`keytool -genkeypair -keystore legacy-tv-hub-release.jks -alias legacyhub -keyalg RSA -keysize 3072 -validity 12000`
+## Sobre atualização do APK
 
-Não coloque o keystore, senhas ou outros segredos no repositório. Depois de configurar os secrets, uma nova atualização desta branch disparará a release assinada.
+Versão Android: `0.1.1`, `versionCode=2`. Para um APK substituir outro, são necessários o **mesmo ID e a mesma chave de assinatura**. A compilação debug do GitHub normalmente gera uma chave temporária; portanto a versão debug V0.1.1 poderá exigir desinstalar o debug V0.1.0 que já estava no celular.
 
-## Instalação Samsung J4300
+A solução definitiva é configurar os segredos de assinatura permanentes no repositório:
+`LEGACY_TV_HUB_KEYSTORE_B64`, `LEGACY_TV_HUB_STORE_PASSWORD`, `LEGACY_TV_HUB_KEY_ALIAS`, `LEGACY_TV_HUB_KEY_PASSWORD`. **Nunca envie ou armazene a chave privada no código público.** A partir do primeiro APK release assinado com essa chave e IDs fixos, atualizações subsequentes podem ser instaladas sem criar aplicativos duplicados.
 
-O Android oferece `/widgetlist.xml` e `/Widget/LegacyTVHub_<versão>.zip` na LAN para o Smart Hub Orsay sincronizar. Essa sincronização geralmente requer HTTP na **porta 80**, que pode estar inacessível ao Android sem privilégios. O aplicativo informa a falha sem simular uma instalação concluída.
-
-**Ainda não validado na Samsung UN32J4300AGXZD**: precisamos testar descoberta manual, sincronização, primeiro lançamento, uso do controle, atualização e retenção de dados. Apenas dispositivos do próprio usuário ou com autorização do proprietário.
+Branch: `legacy-tv-hub-v0.1` do repositório OpenAirTV. O projeto OpenAirTV em `main` permanece intacto.

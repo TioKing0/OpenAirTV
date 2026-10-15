@@ -9,11 +9,24 @@ assert product['androidApplicationId'] == 'br.com.legacytvhub.manager'
 assert product['orsayWidgetId'] == 'LegacyTVHub'
 gradle = (root / 'app/build.gradle').read_text()
 assert "applicationId 'br.com.legacytvhub.manager'" in gradle
-package = root / 'app/src/main/assets' / ('LegacyTVHub_' + product['version'] + '.zip')
-with ZipFile(package) as z:
-    assert {'config.xml', 'index.html', 'main.js', 'style.css', 'images/thumb.png', 'images/bigthumb.png'} <= set(z.namelist())
-    xml = ET.fromstring(z.read('config.xml'))
-    assert xml.findtext('widgetname') == 'Legacy TV Hub'
-    assert xml.findtext('ver') == product['version']
+assert product['androidVersionCode'] >= 2
+assets = root / 'app/src/main/assets'
+version = product['version']
+network = assets / ('LegacyTVHub_' + version + '.zip')
+usb = assets / ('LegacyTVHub_USB_' + version + '.zip')
+expected = {'config.xml', 'index.html', 'main.js', 'style.css', 'images/thumb.png', 'images/bigthumb.png'}
+with ZipFile(network) as z:
+    assert expected <= set(z.namelist())
+    cfg = ET.fromstring(z.read('config.xml'))
+    assert cfg.findtext('widgetname') == 'Legacy TV Hub'
+    assert cfg.findtext('ver') == version
     assert z.read('images/thumb.png').startswith(b'\x89PNG')
-print('Contract OK:', product['version'], product['androidApplicationId'], product['orsayWidgetId'])
+with ZipFile(usb) as z:
+    assert {'LegacyTVHub/' + p for p in expected} <= set(z.namelist())
+    assert ET.fromstring(z.read('LegacyTVHub/config.xml')).findtext('ver') == version
+server = (root/'app/src/main/java/br/com/legacytvhub/manager/LocalWidgetServer.java').read_text()
+activity = (root/'app/src/main/java/br/com/legacytvhub/manager/MainActivity.java').read_text()
+assert 'new ServerSocket(8080' in server
+assert 'LegacyTVHub_USB_' in activity
+assert 'ACTION_CREATE_DOCUMENT' in activity
+print('Contract OK:', version, product['androidApplicationId'], product['orsayWidgetId'], 'USB and LAN')
