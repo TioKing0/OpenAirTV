@@ -22,6 +22,12 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 import android.util.LruCache;
 import android.os.Handler;
 import android.os.Looper;
@@ -92,6 +98,16 @@ public final class MainActivity extends Activity {
     private ScrollView browseScroll;
     private boolean showingDetails=false;
     private int browseOffset=0;
+    private EditText searchField;
+    private LinearLayout searchPanel;
+    private LinearLayout searchResultsArea;
+    private TextView searchFeedback;
+    private String searchText="";
+    private String searchFilter="all";
+    private int searchGeneration=0;
+    private final LinkedHashMap<String,Media> searchMatches=new LinkedHashMap<>();
+    private Runnable pendingSearch;
+    private Runnable pendingSearchRender;
     private final Runnable refreshTask=()->refreshCatalogRows();
 
 
@@ -212,9 +228,13 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(30);
         content.addView(subtitle,sp);
 
-        if("inicio".equals(activeSection)||"minha".equals(activeSection))showPersonal();
-        updateSpotlight();
-        refreshCatalogRows();
+        if("buscar".equals(activeSection)){
+            buildSearchPage();
+        }else{
+            if("inicio".equals(activeSection)||"minha".equals(activeSection))showPersonal();
+            updateSpotlight();
+            refreshCatalogRows();
+        }
         browseRoot=shell;
         setContentView(shell);
         browseScroll.post(()->browseScroll.scrollTo(0,0));
@@ -222,6 +242,7 @@ public final class MainActivity extends Activity {
     private String sectionLabel(String key){
         if("filmes".equals(key))return "Filmes";
         if("series".equals(key))return "Séries";
+        if("buscar".equals(key))return "Buscar";
         if("minha".equals(key))return "Minha biblioteca";
         return "Início";
     }
@@ -236,7 +257,11 @@ public final class MainActivity extends Activity {
         navParams.bottomMargin=dp(7);
         parent.addView(item,navParams);
         item.setOnClickListener(v->{
-            if("buscar".equals(route)){searchCatalog();return;}
+            if("buscar".equals(route)){
+                if(!"buscar".equals(activeSection)){activeSection="buscar";render();}
+                else if(searchField!=null)searchField.requestFocus();
+                return;
+            }
             if("fontes".equals(route)){showSources();return;}
             if(route.equals(activeSection))return;
             activeSection=route;render();
@@ -712,6 +737,9 @@ public final class MainActivity extends Activity {
     }
     @Override public void onBackPressed(){
         if(showingDetails){returnToBrowse();return;}
+        if("buscar".equals(activeSection)){
+            activeSection="inicio";searchGeneration++;render();return;
+        }
         super.onBackPressed();
     }
     private void resumeEntry(UserLibrary.Entry e){
@@ -836,24 +864,255 @@ public final class MainActivity extends Activity {
                (dialog,which)->showAll(new String[]{"continue","later","liked","recent"}[which]))
            .setNegativeButton("Fechar",null).show();
     }
+    /** Search screen rendered for a TV remote, not a modal limited to first-page items. */
     private void searchCatalog(){
-        EditText field=new EditText(this);field.setSingleLine(true);
-        field.setHint("Título, filme ou série");
-        LinearLayout box=new LinearLayout(this);box.setPadding(dp(24),0,dp(24),0);box.addView(field);
-        new AlertDialog.Builder(this).setTitle("Buscar nos catálogos carregados")
-          .setView(box).setNegativeButton("Cancelar",null)
-          .setPositiveButton("Buscar",(d,w)->{
-              String query=field.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
-              if(query.isEmpty())return;
-              ArrayList<Media> matched=new ArrayList<>();
-              for(Media m:knownItems)if(m.name.toLowerCase(java.util.Locale.ROOT).contains(query))matched.add(m);
-              if(matched.isEmpty()){message("Nenhum resultado nos catálogos já carregados.");return;}
-              String[] names=new String[Math.min(100,matched.size())];
-              for(int i=0;i<names.length;i++)names[i]=matched.get(i).name;
-              new AlertDialog.Builder(this).setTitle("Busca • "+matched.size()+" resultado(s)")
-                .setItems(names,(dd,i)->details(matched.get(i)))
-                .setNegativeButton("Fechar",null).show();
-          }).show();
+        activeSection="buscar";
+        render();
+    }
+    private void buildSearchPage(){
+        searchPanel=new LinearLayout(this);
+        searchPanel.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams section=new LinearLayout.LayoutParams(-1,-2);
+        section.topMargin=dp(13);
+        catalogArea.addView(searchPanel,section);
+        TextView hint=text("Encontre filmes e séries em todos os catálogos pesquisáveis dos seus addons.",15,0xffb4d0dd,false);
+        searchPanel.addView(hint);
+        LinearLayout searchBar=new LinearLayout(this);
+        searchBar.setOrientation(LinearLayout.HORIZONTAL);
+        searchBar.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams bar=new LinearLayout.LayoutParams(-1,-2);bar.topMargin=dp(15);
+        searchPanel.addView(searchBar,bar);
+        searchField=new EditText(this);
+        searchField.setSingleLine(true);
+        searchField.setTextColor(Color.WHITE);
+        searchField.setHintTextColor(0xff86a6b5);
+        searchField.setTextSize(18);
+        searchField.setHint("Digite o nome de um filme ou série");
+        searchField.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        searchField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        searchField.setBackground(shape(0xff1c3749,0xff457589));
+        searchField.setPadding(dp(20),dp(14),dp(14),dp(14));
+        searchBar.addView(searchField,new LinearLayout.LayoutParams(0,dp(58),1f));
+        Button submit=button("⌕  Pesquisar",()->runSearch(searchField.getText().toString()));
+        searchBar.addView(submit);
+        searchField.setOnEditorActionListener((v,id,event)->{
+            if(id==EditorInfo.IME_ACTION_SEARCH){
+                runSearch(searchField.getText().toString());
+                ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE))
+                    .hideSoftInputFromWindow(searchField.getWindowToken(),0);
+                return true;
+            }
+            return false;
+        });
+        LinearLayout filters=new LinearLayout(this);
+        LinearLayout.LayoutParams filterLp=new LinearLayout.LayoutParams(-1,-2);filterLp.topMargin=dp(13);
+        searchPanel.addView(filters,filterLp);
+        String[] types={"all","movie","series"};
+        String[] labels={"Tudo","Filmes","Séries"};
+        for(int i=0;i<types.length;i++){
+            final String type=types[i];
+            Button filter=button((type.equals(searchFilter)?"●  ":"○  ")+labels[i],()->{
+                if(searchFilter.equals(type))return;
+                searchFilter=type;
+                // Change filter locally: no repeated provider requests or lost query.
+                buildSearchResults();
+            });
+            filters.addView(filter);
+        }
+        searchFeedback=text("Use o teclado da TV para pesquisar títulos reais.",14,0xff9bb9c7,false);
+        LinearLayout.LayoutParams feedbackLp=new LinearLayout.LayoutParams(-1,-2);
+        feedbackLp.topMargin=dp(10);
+        searchPanel.addView(searchFeedback,feedbackLp);
+        searchResultsArea=new LinearLayout(this);
+        searchResultsArea.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams out=new LinearLayout.LayoutParams(-1,-2);out.topMargin=dp(17);
+        searchPanel.addView(searchResultsArea,out);
+        searchField.setText(searchText);
+        searchField.setSelection(searchField.length());
+        searchField.addTextChangedListener(new TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence text,int from,int count,int after){}
+            @Override public void onTextChanged(CharSequence text,int from,int before,int count){
+                if(pendingSearch!=null)ui.removeCallbacks(pendingSearch);
+                final String query=text.toString();
+                pendingSearch=()->runSearch(query);
+                ui.postDelayed(pendingSearch,650L);
+            }
+            @Override public void afterTextChanged(Editable text){}
+        });
+        if(!searchText.trim().isEmpty())runSearch(searchText);
+        searchField.requestFocus();
+    }
+    private void runSearch(String query){
+        final String normalized=query==null?"":query.trim();
+        if(pendingSearch!=null)ui.removeCallbacks(pendingSearch);
+        pendingSearch=null;
+        searchText=normalized;
+        searchGeneration++;
+        final int token=searchGeneration;
+        searchMatches.clear();
+        if(searchResultsArea==null||!"buscar".equals(activeSection))return;
+        searchResultsArea.removeAllViews();
+        if(normalized.length()<2){
+            searchFeedback.setText("Digite pelo menos 2 caracteres para encontrar um título.");
+            return;
+        }
+        if(normalized.length()>120){
+            searchFeedback.setText("Limite de 120 caracteres por pesquisa.");
+            return;
+        }
+        // Results already loaded on the main screen can be shown immediately.
+        String needle=normalized.toLowerCase(Locale.ROOT);
+        for(Media m:knownItems)if(m.name.toLowerCase(Locale.ROOT).contains(needle))
+            searchMatches.put(identity(m),m);
+        searchFeedback.setText("Procurando “"+normalized+"” nos addons…");
+        buildSearchResults();
+        final ArrayList<String> providers=new ArrayList<>(sources);
+        // Search endpoints belong to catalog resources whose manifest declares the search extra.
+        pool.execute(()->{
+            int checked=0,failed=0,supported=0;
+            for(String addon:providers){
+                if(token!=searchGeneration||Thread.currentThread().isInterrupted())break;
+                try{
+                    JSONObject manifest=getManifest(addon);
+                    if(!supportsResource(manifest,"catalog","movie","")&&
+                       !supportsResource(manifest,"catalog","series",""))continue;
+                    JSONArray catalogs=manifest.optJSONArray("catalogs");
+                    if(catalogs==null)continue;
+                    String root=addon.substring(0,addon.length()-"manifest.json".length());
+                    int addonChecked=0;
+                    for(int c=0;c<catalogs.length()&&addonChecked<8;c++){
+                        if(token!=searchGeneration)break;
+                        JSONObject catalog=catalogs.optJSONObject(c);if(catalog==null)continue;
+                        String type=catalog.optString("type","");
+                        String id=catalog.optString("id","");
+                        if(!("movie".equals(type)||"series".equals(type)||"tv".equals(type)))continue;
+                        if(!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
+                        JSONArray extras=catalog.optJSONArray("extra");
+                        if(extras==null)continue;
+                        boolean canSearch=false;
+                        for(int e=0;e<extras.length();e++){
+                            Object item=extras.opt(e);
+                            if(item instanceof JSONObject&&"search".equals(((JSONObject)item).optString("name")))
+                                canSearch=true;
+                            else if("search".equals(item))canSearch=true;
+                        }
+                        if(!canSearch)continue;
+                        addonChecked++;supported++;
+                        try{
+                            String encoded=URLEncoder.encode(normalized,"UTF-8").replace("+","%20");
+                            JSONObject answer=getJson(root+"catalog/"+type+"/"+id+"/search="+encoded+".json");
+                            JSONArray metas=answer.optJSONArray("metas");
+                            checked++;
+                            if(metas==null)continue;
+                            ArrayList<Media> found=new ArrayList<>();
+                            for(int j=0;j<metas.length()&&j<35;j++){
+                                JSONObject json=metas.optJSONObject(j);if(json==null)continue;
+                                String mediaId=json.optString("id","");
+                                String mediaType=json.optString("type",type);
+                                if(mediaId.isEmpty()||json.optString("name","").isEmpty())continue;
+                                Media m=new Media();
+                                m.id=mediaId;m.type=mediaType;
+                                m.name=json.optString("name","");m.poster=json.optString("poster","");
+                                m.description=json.optString("description","");
+                                m.origin=manifest.optString("name","Addon");m.catalogId=id;
+                                m.source=root;
+                                JSONArray genres=json.optJSONArray("genres");
+                                if(genres!=null)for(int k=0;k<genres.length()&&k<8;k++){
+                                    if(!m.genre.isEmpty())m.genre+=",";
+                                    m.genre+=genres.optString(k,"");
+                                }
+                                found.add(m);
+                            }
+                            if(!found.isEmpty())runOnUiThread(()->{
+                                if(token!=searchGeneration||!"buscar".equals(activeSection))return;
+                                for(Media m:found){
+                                    String key=identity(m);
+                                    Media current=searchMatches.get(key);
+                                    if(current==null)searchMatches.put(key,m);
+                                    else {
+                                        if(current.poster.isEmpty())current.poster=m.poster;
+                                        if(current.description.isEmpty())current.description=m.description;
+                                    }
+                                }
+                                scheduleSearchResults();
+                            });
+                        }catch(Exception e){failed++;}
+                    }
+                }catch(Exception ex){failed++;}
+            }
+            final int attempts=checked,errors=failed,eligible=supported;
+            runOnUiThread(()->{
+                if(token!=searchGeneration||!"buscar".equals(activeSection))return;
+                int size=searchMatches.size();
+                if(size==0)
+                    searchFeedback.setText("Nenhum resultado para “"+normalized+"”. Tente outro título.");
+                else searchFeedback.setText(size+" resultado(s) encontrados para “"+normalized+"”.");
+                if(eligible==0&&size==0)
+                    searchFeedback.setText("Nenhum addon ativo oferece pesquisa. Confira as fontes.");
+                else if(errors>0&&attempts==0&&size==0)
+                    searchFeedback.setText("As fontes de pesquisa não responderam. Tente novamente.");
+                buildSearchResults();
+            });
+        });
+    }
+    private void scheduleSearchResults(){
+        if(pendingSearchRender!=null)ui.removeCallbacks(pendingSearchRender);
+        pendingSearchRender=()->buildSearchResults();
+        ui.postDelayed(pendingSearchRender,260L);
+    }
+    private void buildSearchResults(){
+        if(searchResultsArea==null||!"buscar".equals(activeSection))return;
+        searchResultsArea.removeAllViews();
+        ArrayList<Media> list=new ArrayList<>();
+        for(Media m:searchMatches.values()){
+            if(("all".equals(searchFilter)||
+                 ("movie".equals(searchFilter)&&"movie".equals(m.type))||
+                 ("series".equals(searchFilter)&&"series".equals(m.type))))
+                list.add(m);
+        }
+        final String query=searchText.toLowerCase(Locale.ROOT);
+        Collections.sort(list,(left,right)->{
+            int l=rankSearch(left.name,query),r=rankSearch(right.name,query);
+            int c=Integer.compare(r,l);
+            return c!=0?c:left.name.compareToIgnoreCase(right.name);
+        });
+        if(list.isEmpty())return;
+        TextView total=text(list.size()+" títulos encontrados",16,Color.WHITE,true);
+        total.setPadding(0,0,0,dp(10));searchResultsArea.addView(total);
+        GridLayout grid=new GridLayout(this);grid.setColumnCount(4);
+        grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        searchResultsArea.addView(grid);
+        for(int i=0;i<list.size()&&i<64;i++){
+            Media item=list.get(i);
+            LinearLayout tile=new LinearLayout(this);
+            tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setBackground(shape(PANEL,0));
+            tile.setFocusable(true);
+            GridLayout.LayoutParams tileParams=new GridLayout.LayoutParams();
+            tileParams.width=dp(151);tileParams.height=dp(258);
+            tileParams.setMargins(0,0,dp(13),dp(14));
+            grid.addView(tile,tileParams);
+            ImageView poster=new ImageView(this);
+            poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            poster.setBackgroundColor(0xff1c3449);
+            tile.addView(poster,new LinearLayout.LayoutParams(-1,dp(205)));
+            TextView name=text(item.name,13,Color.WHITE,true);
+            name.setMaxLines(2);name.setPadding(dp(7),dp(7),dp(6),0);
+            tile.addView(name);
+            tile.setOnClickListener(v->details(item));
+            tile.setOnFocusChangeListener((v,focus)->{
+                v.setBackground(shape(focus?PANEL2:PANEL,focus?AQUA:0));
+                v.animate().scaleX(focus?1.05f:1f).scaleY(focus?1.05f:1f).setDuration(130L).start();
+                name.setTextColor(focus?AQUA:Color.WHITE);
+            });
+            if(item.poster.startsWith("https://"))loadPoster(item.poster,poster);
+        }
+    }
+    private int rankSearch(String title,String query){
+        String value=title.toLowerCase(Locale.ROOT);
+        if(value.equals(query))return 100;
+        if(value.startsWith(query))return 75;
+        return value.contains(query)?50:10;
     }
 
     /** A catalog does not imply a meta resource. Resolve detailed series metadata across eligible addons. */
@@ -1196,5 +1455,11 @@ public final class MainActivity extends Activity {
         }finally{connection.disconnect();}
     }
     @Override protected void onResume(){super.onResume();if(personal!=null)showPersonal();}
-    @Override protected void onDestroy(){pool.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){
+        searchGeneration++;
+        if(pendingSearch!=null)ui.removeCallbacks(pendingSearch);
+        if(pendingSearchRender!=null)ui.removeCallbacks(pendingSearchRender);
+        pool.shutdownNow();
+        super.onDestroy();
+    }
 }
