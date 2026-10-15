@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -62,6 +63,10 @@ public final class PlayerActivity extends Activity {
     };
     private String[] queuedUrls,queuedKeys;
     private Button qualityButton,languageButton,sourceButton;
+    private LinearLayout quickControls;
+    private boolean optionMenuOpen=false;
+    private static final long CONTROLS_TIMEOUT_MS=5000L;
+    private final Runnable hideControls=()->hideQuickControls();
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
@@ -110,7 +115,8 @@ public final class PlayerActivity extends Activity {
         layout.setBackgroundColor(0xff000000);
         playerView=new PlayerView(this);
         playerView.setUseController(true);
-        playerView.setControllerShowTimeoutMs(6500);
+        playerView.setControllerShowTimeoutMs(5000);
+        playerView.setControllerAutoShow(false);
         playerView.setFocusable(true);playerView.setFocusableInTouchMode(true);
         playerView.setKeepScreenOn(true);
         playerView.setShowSubtitleButton(true);
@@ -120,6 +126,79 @@ public final class PlayerActivity extends Activity {
         playOption(selectedIndex,lastKnownPosition,false);
         handler.postDelayed(periodic,10000L);
         playerView.requestFocus();
+        playerView.hideController();
+        if(!queue)hideQuickControls();
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event){
+        if(event.getAction()!=KeyEvent.ACTION_DOWN||queue||optionMenuOpen)
+            return super.dispatchKeyEvent(event);
+        int key=event.getKeyCode();
+        if(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO){
+            showQuickControls(true);
+            return true;
+        }
+        if(key==KeyEvent.KEYCODE_DPAD_UP && (!isQuickVisible()||playerView.hasFocus())){
+            showQuickControls(true);
+            return true;
+        }
+        if((key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER) &&
+            !isQuickVisible() && player!=null){
+            player.setPlayWhenReady(!player.getPlayWhenReady());
+            playerView.showController();
+            showQuickControls(false);
+            return true;
+        }
+        if((key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT)&&
+            playerView.hasFocus()&&!playerView.isControllerFullyVisible()&&player!=null){
+            long next=player.getCurrentPosition()+
+                 (key==KeyEvent.KEYCODE_DPAD_LEFT?-10000L:10000L);
+            player.seekTo(Math.max(0L,next));
+            playerView.showController();
+            showQuickControls(false);
+            return true;
+        }
+        if(isQuickVisible()&&
+            (key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT||
+             key==KeyEvent.KEYCODE_DPAD_DOWN||key==KeyEvent.KEYCODE_DPAD_CENTER||
+             key==KeyEvent.KEYCODE_ENTER)){
+            scheduleQuickHide();
+        }
+        return super.dispatchKeyEvent(event);
+    }
+    private boolean isQuickVisible(){
+        return quickControls!=null&&quickControls.getVisibility()==View.VISIBLE;
+    }
+    private void showQuickControls(boolean focusFirst){
+        if(queue||quickControls==null||closing)return;
+        if(!isQuickVisible()){
+            quickControls.setAlpha(0f);
+            quickControls.setVisibility(View.VISIBLE);
+            quickControls.animate().alpha(1f).setDuration(175L).start();
+        }
+        if(focusFirst&&qualityButton!=null)qualityButton.requestFocus();
+        scheduleQuickHide();
+    }
+    private void scheduleQuickHide(){
+        handler.removeCallbacks(hideControls);
+        if(!optionMenuOpen)handler.postDelayed(hideControls,CONTROLS_TIMEOUT_MS);
+    }
+    private void hideQuickControls(){
+        if(quickControls==null||optionMenuOpen)return;
+        handler.removeCallbacks(hideControls);
+        if(quickControls.getVisibility()==View.GONE)return;
+        if(quickControls.hasFocus()&&playerView!=null)playerView.requestFocus();
+        quickControls.animate().alpha(0f).setDuration(230L)
+            .withEndAction(()->{if(!optionMenuOpen&&quickControls!=null)
+                quickControls.setVisibility(View.GONE);}).start();
+    }
+    @Override public void onBackPressed(){
+        if(optionMenuOpen){super.onBackPressed();return;}
+        if(isQuickVisible()){hideQuickControls();playerView.hideController();return;}
+        if(playerView!=null&&playerView.isControllerFullyVisible()){
+            playerView.hideController();return;
+        }
+        super.onBackPressed();
     }
 
     private int dp(int size){return (int)(size*getResources().getDisplayMetrics().density+.5f);}
@@ -133,6 +212,7 @@ public final class PlayerActivity extends Activity {
     }
     private void installQuickControls(FrameLayout root){
         LinearLayout top=new LinearLayout(this);
+        quickControls=top;
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         top.setPadding(dp(8),0,dp(8),0);
@@ -148,6 +228,18 @@ public final class PlayerActivity extends Activity {
         languageButton.setOnClickListener(v->showLanguageOptions());
         sourceButton.setOnClickListener(v->showSourceOptions());
         updateControls();
+        top.setVisibility(View.GONE);
+        View.OnFocusChangeListener focus=(v,active)->{
+            v.setScaleX(active?1.035f:1f);
+            v.setScaleY(active?1.035f:1f);
+            if(active){
+                v.setBackgroundTintList(ColorStateList.valueOf(0xff276b85));
+                scheduleQuickHide();
+            }else v.setBackgroundTintList(ColorStateList.valueOf(0xff16485b));
+        };
+        qualityButton.setOnFocusChangeListener(focus);
+        languageButton.setOnFocusChangeListener(focus);
+        sourceButton.setOnFocusChangeListener(focus);
     }
     private void updateControls(){
         if(queue||verified.isEmpty())return;
@@ -157,6 +249,8 @@ public final class PlayerActivity extends Activity {
         sourceButton.setText("Fontes · "+verified.size());
     }
     private void showQualityOptions(){
+        optionMenuOpen=true;
+        handler.removeCallbacks(hideControls);
         LinkedHashMap<String,Integer> byQuality=new LinkedHashMap<>();
         for(int i=0;i<verified.size();i++){
             String quality=verified.get(i).quality;
@@ -185,9 +279,12 @@ public final class PlayerActivity extends Activity {
                     player.setTrackSelectionParameters(player.getTrackSelectionParameters()
                         .buildUpon().setMaxVideoSize(width,height).build());
                 }
-            }).setNegativeButton("Fechar",null).show();
+            }).setNegativeButton("Fechar",null)
+            .setOnDismissListener(dialog->{optionMenuOpen=false;scheduleQuickHide();}).show();
     }
     private void showLanguageOptions(){
+        optionMenuOpen=true;
+        handler.removeCallbacks(hideControls);
         LinkedHashMap<String,Integer> byLanguage=new LinkedHashMap<>();
         for(int i=0;i<verified.size();i++){
             String language=verified.get(i).language;
@@ -230,9 +327,12 @@ public final class PlayerActivity extends Activity {
         }
         new AlertDialog.Builder(this).setTitle("Idioma disponível")
             .setItems(choices.toArray(new String[0]),(dialog,index)->handlers.get(index).run())
-            .setNegativeButton("Fechar",null).show();
+            .setNegativeButton("Fechar",null)
+            .setOnDismissListener(dialog->{optionMenuOpen=false;scheduleQuickHide();}).show();
     }
     private void showSourceOptions(){
+        optionMenuOpen=true;
+        handler.removeCallbacks(hideControls);
         String[] labels=new String[verified.size()];
         for(int i=0;i<verified.size();i++){
             StreamProbe.Option o=verified.get(i);
@@ -241,7 +341,8 @@ public final class PlayerActivity extends Activity {
         }
         new AlertDialog.Builder(this).setTitle("Fontes com resposta HTTP válida")
             .setItems(labels,(dialog,index)->switchSource(index,true))
-            .setNegativeButton("Voltar",null).show();
+            .setNegativeButton("Voltar",null)
+            .setOnDismissListener(dialog->{optionMenuOpen=false;scheduleQuickHide();}).show();
     }
     private void switchSource(int index,boolean fromUser){
         if(queue||index<0||index>=verified.size())return;
@@ -425,6 +526,7 @@ public final class PlayerActivity extends Activity {
     @Override protected void onDestroy(){
         closing=true;
         handler.removeCallbacks(periodic);
+        handler.removeCallbacks(hideControls);
         save(false);
         if(player!=null){player.release();player=null;}
         super.onDestroy();
