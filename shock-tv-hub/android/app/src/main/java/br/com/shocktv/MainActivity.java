@@ -114,6 +114,7 @@ public final class MainActivity extends Activity {
         nav.addView(button("Reproduzir URL",()->playDirect()));
         nav.addView(button("Minhas fontes",()->showSources()));
         nav.addView(button("Assistir mais tarde",()->showAll("later")));
+        nav.addView(button("▶ Curtidos",()->playLikedPlaylist()));
         hero.addView(nav);
         personal=new LinearLayout(this);personal.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.topMargin=dp(20);
@@ -391,6 +392,31 @@ public final class MainActivity extends Activity {
         if("liked".equals(filter))return "Lista de curtidos";
         if("later".equals(filter))return "Assistir mais tarde";
         return "Assistidos recentemente";
+    }
+    /** Auto-play the viewer's liked videos that already have a resolved, accessible media URL. */
+    private void playLikedPlaylist(){
+        ArrayList<UserLibrary.Entry> favorites=library.list("liked");
+        ArrayList<String> urls=new ArrayList<>(), keys=new ArrayList<>();
+        for(UserLibrary.Entry e:favorites){
+            if(e.streamUrl==null)continue;
+            if(!e.streamUrl.startsWith("https://")&&!e.streamUrl.startsWith("http://"))continue;
+            urls.add(e.streamUrl);keys.add(e.key);
+        }
+        if(urls.isEmpty()){
+            message("A lista de curtidos ainda não contém vídeos com streams reproduzidos. "+
+                "Escolha um título, selecione uma fonte disponível e inicie a reprodução uma vez para adicioná-lo à fila.");
+            return;
+        }
+        UserLibrary.Entry first=library.get(keys.get(0));
+        Intent intent=new Intent(this,PlayerActivity.class);
+        intent.putExtra("url",urls.get(0));intent.putExtra("title",first.title);
+        intent.putExtra("id",first.id);intent.putExtra("type",first.type);
+        intent.putExtra("poster",first.poster);intent.putExtra("description",first.description);
+        intent.putExtra("source",first.source);intent.putExtra("episodeId",first.episodeId);
+        intent.putExtra("libraryKey",first.key);
+        intent.putExtra("playlistKeys",keys.toArray(new String[0]));
+        intent.putExtra("playlistUrls",urls.toArray(new String[0]));
+        startActivity(intent);
     }
     private void showFullLibrary(){
         new AlertDialog.Builder(this).setTitle("Minha biblioteca")
