@@ -1,0 +1,70 @@
+name: Legacy TV Hub Android
+on:
+  push:
+    branches: [legacy-tv-hub-v0.1]
+    paths:
+      - "legacy-tv-hub/**"
+      - ".github/workflows/legacy-tv-hub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: legacy-tv-hub
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Generate and verify permanent Orsay widget
+        run: |
+          python3 scripts/build_widget.py
+          python3 scripts/test_contract.py
+      - name: Verify Android builds
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Check generated APK
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Check persistent signing
+        env:
+          KEYSTORE_B64: ${{ secrets.LEGACY_TV_HUB_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.LEGACY_TV_HUB_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LEGACY_TV_HUB_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.LEGACY_TV_HUB_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > signing.jks
+            echo "HAS_SIGNING=1" >> "$GITHUB_ENV"
+          else
+            echo "::notice::Signed release skipped. Configure the four permanent signing secrets to enable updateable APKs."
+          fi
+      - name: Build permanently signed APK
+        if: env.HAS_SIGNING == '1'
+        env:
+          LTH_SIGNING_STORE: ${{ github.workspace }}/legacy-tv-hub/signing.jks
+          LTH_SIGNING_STORE_PASSWORD: ${{ secrets.LEGACY_TV_HUB_STORE_PASSWORD }}
+          LTH_SIGNING_KEY_ALIAS: ${{ secrets.LEGACY_TV_HUB_KEY_ALIAS }}
+          LTH_SIGNING_KEY_PASSWORD: ${{ secrets.LEGACY_TV_HUB_KEY_PASSWORD }}
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Upload updateable Android APK
+        if: env.HAS_SIGNING == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Legacy-TV-Hub-Signed-APK
+          path: legacy-tv-hub/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,6 @@
+*.jks
+*.keystore
+.gradle/
+build/
+app/build/
+app/src/main/assets/LegacyTVHub_*.zip
