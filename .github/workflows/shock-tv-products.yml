@@ -40,7 +40,7 @@ jobs:
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-AndroidTV-v0.3.1-APK-PREVIEW
+          name: Shock-TV-AndroidTV-v0.3.2-APK-PREVIEW
           path: shock-tv-hub/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -70,7 +70,7 @@ jobs:
         if: env.SHOCK_RELEASE_READY == '1'
         uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-v0.3.1-SIGNED-RELEASE
+          name: Shock-TV-v0.3.2-SIGNED-RELEASE
           path: shock-tv-hub/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30

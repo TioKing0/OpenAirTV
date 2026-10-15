@@ -61,3 +61,12 @@ Fontes registradas por padrão, com controles de ativação/desativação persis
 - ThePirateBay+ — `https://thepiratebay-plus.strem.fun/manifest.json`
 
 Esses endereços são armazenados como referências remotas, não incluem filmes, séries ou arquivos de mídia. Eles não implicam disponibilidade ou autorização para reprodução. O aplicativo só reproduz fontes HTTP(S) compatíveis fornecidas pelos addons ou URLs próprias; **não contém motor BitTorrent e não reproduz diretamente torrents**. Verificação de rede ocorre em runtime; addons offline são ignorados no carregamento do catálogo. O usuário pode desativar cada fonte, e suas fontes personalizadas continuam salvas. Para distribuição comercial, verificar licenças e direitos de uso.
+
+
+## V0.3.2 — Metadados Stremio e episódios
+
+Corrige a navegação de séries reportada após V0.3.1. No protocolo Stremio, uma fonte de `catalog` não é obrigada a oferecer `meta`. O novo resolvedor procura a lista de episódios em todos os addons ativados que declaram `meta` para o tipo e identificador, dando prioridade ao Cinemeta para IDs IMDb. Ele aplica `types` e `idPrefixes` do resource quando definidos, preserva os valores globais como fallback e usa `meta.videos` para determinar os episódios reais (sem conteúdo demonstrativo ou estimado). Uma fonte quebrada deixa de impedir as outras consultas. Mostra uma tela por temporadas em vez de um seletor genérico.
+
+As respostas são verificadas por status HTTP, protocolo HTTPS e formato JSON. Páginas HTML e erros de CDN passam a ser tratados como fonte indisponível, não como dados de episódios. O aplicativo continua sem motor BitTorrent: addons com apenas `infoHash` não disponibilizam mídia reproduzível em Media3. A resposta HTTP(S) de um addon não prova que sua mídia está disponível ou pode ser redistribuída comercialmente.
+
+Referência de protocolo: https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/protocol.md . Também será necessário validar manualmente o fluxo na Android TV física.
