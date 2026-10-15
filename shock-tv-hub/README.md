@@ -27,3 +27,14 @@ O sistema não disponibiliza nem recomenda catálogos de streams pirateados para
 
 ### Segurança
 URLs remotas de addons são código/dados externos não confiáveis. O app impõe timeout e limite por resposta, mas a versão comercial exigirá mais controles, inclusive bloqueio a DNS/IP internos, limites de imagens e cachê.
+
+
+## Android TV 0.2.0: uso diário
+
+O Shock TV guarda em armazenamento local privado, sem conta obrigatória: Continuar assistindo, último ponto por filme ou episódio, lista Assistir mais tarde, Curtidos com fila contínua para streams já reproduzidos, histórico, busca nos catálogos carregados, remoção de itens e limpeza de histórico. O player salva checkpoints a cada 10 segundos e ao pausar ou fechar, com opção de retomar ou recomeçar. Os dados permanecem após reiniciar a TV e numa atualização do mesmo aplicativo com a mesma assinatura.
+
+A versão 0.2.0 não inclui filmes de demonstração ou itens fictícios. Catálogos de metadados não garantem fontes reproduzíveis. A fila de curtidos só inclui streams HTTP(S) já descobertos, que podem expirar.
+
+## Assinatura para atualizações permanentes
+
+O workflow de Android TV publica um APK debug de avaliação. Para produzir APKs comerciais que atualizam por cima da instalação, configure uma única chave keystore e os secrets SHOCK_TV_KEYSTORE_B64, SHOCK_TV_STORE_PASSWORD, SHOCK_TV_KEY_ALIAS e SHOCK_TV_KEY_PASSWORD. Não envie o arquivo JKS para o GitHub. O workflow publicará então um artefato SIGNED-RELEASE com ID de pacote br.com.shocktv e versionCode crescente. APKs debug não garantem atualização sem reinstalação.

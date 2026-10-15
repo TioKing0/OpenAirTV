@@ -40,8 +40,38 @@ jobs:
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-AndroidTV-v0.1.0-APK
+          name: Shock-TV-AndroidTV-v0.2.0-APK-PREVIEW
           path: shock-tv-hub/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Read permanent release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.SHOCK_TV_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.SHOCK_TV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHOCK_TV_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.SHOCK_TV_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > shock-tv-release.jks
+            echo "SHOCK_RELEASE_READY=1" >> "$GITHUB_ENV"
+          else
+            echo "::notice::Permanent signing not yet configured. Debug preview only."
+          fi
+      - name: Build permanently signed APK
+        if: env.SHOCK_RELEASE_READY == '1'
+        env:
+          SHOCK_TV_SIGNING_PATH: ${{ github.workspace }}/shock-tv-hub/android/shock-tv-release.jks
+          SHOCK_TV_SIGNING_STORE_PASSWORD: ${{ secrets.SHOCK_TV_STORE_PASSWORD }}
+          SHOCK_TV_SIGNING_ALIAS: ${{ secrets.SHOCK_TV_KEY_ALIAS }}
+          SHOCK_TV_SIGNING_KEY_PASSWORD: ${{ secrets.SHOCK_TV_KEY_PASSWORD }}
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Publish updateable release APK
+        if: env.SHOCK_RELEASE_READY == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shock-TV-v0.2.0-SIGNED-RELEASE
+          path: shock-tv-hub/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
 
