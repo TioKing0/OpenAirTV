@@ -21,6 +21,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -39,11 +40,15 @@ public final class MainActivity extends Activity {
     private final ArrayList<String> sources=new ArrayList<>();
     private LinearLayout content;
     private TextView subtitle;
+    private UserLibrary library;
+    private LinearLayout personal;
+    private final ArrayList<Media> knownItems=new ArrayList<>();
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        library=new UserLibrary(this);
         loadSavedSources();
         render();
         for (String source : new ArrayList<>(sources)) loadSource(source);
@@ -87,6 +92,8 @@ public final class MainActivity extends Activity {
         TextView logo=text("SHOCK  TV",26,AQUA,true);
         header.addView(logo,new LinearLayout.LayoutParams(0,dp(53),1f));
         Button b=button("＋ Adicionar addon",()->addSourceDialog());
+        header.addView(button("⌕ Buscar",()->searchCatalog()));
+        header.addView(button("Minha biblioteca",()->showFullLibrary()));
         header.addView(b);content.addView(header);
 
         View divider=new View(this);divider.setBackgroundColor(0xff26445b);
@@ -106,7 +113,12 @@ public final class MainActivity extends Activity {
         LinearLayout nav=new LinearLayout(this);nav.setPadding(0,dp(10),0,0);
         nav.addView(button("Reproduzir URL",()->playDirect()));
         nav.addView(button("Minhas fontes",()->showSources()));
+        nav.addView(button("Assistir mais tarde",()->showAll("later")));
         hero.addView(nav);
+        personal=new LinearLayout(this);personal.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.topMargin=dp(20);
+        content.addView(personal,pp);
+        showPersonal();
 
         subtitle=text("Carregando catálogos...",14,0xff85a7ba,false);
         LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,-2);slp.topMargin=dp(15);
@@ -197,7 +209,14 @@ public final class MainActivity extends Activity {
                             media.source=base;found.add(media);
                         }
                         loaded++;
-                        runOnUiThread(()->addCatalog(section,found));
+                        runOnUiThread(()->{
+                            for(Media newItem:found){
+                                boolean exists=false;
+                                for(Media current:knownItems)if(current.id.equals(newItem.id)&&current.type.equals(newItem.type)){exists=true;break;}
+                                if(!exists)knownItems.add(newItem);
+                            }
+                            addCatalog(section,found);
+                        });
                     }catch(Exception ignored){}
                 }
                 runOnUiThread(()->subtitle.setText("CATÁLOGOS DISPONÍVEIS • "+sources.size()+" FONTE(S)"));
@@ -247,16 +266,160 @@ public final class MainActivity extends Activity {
             }catch(Exception ignored){}
         });
     }
-    /** Catalog metadata is separate from playable streams. Never imply that an item is playable before checking. */
-    private void details(Media m){
-        new AlertDialog.Builder(this).setTitle(m.name)
-          .setMessage(m.description+"\n\nConsultaremos as fontes conectadas para encontrar um stream reproduzível.")
-          .setNegativeButton("Cancelar",null)
-          .setPositiveButton("Encontrar reprodução",(d,w)->resolveItem(m))
-          .show();
+    /** All daily actions are available using the D-pad, without separate screens or fake buttons. */
+    private String keyFor(Media m){
+        return (m.episodeId!=null&&!m.episodeId.isEmpty())?
+                UserLibrary.episodeKey(m.id,m.episodeId):UserLibrary.key(m.type,m.id);
     }
+    private UserLibrary.Entry identify(Media m){
+        return library.identify(keyFor(m),m.id,m.type,m.name,m.poster,m.description,m.source,m.episodeId);
+    }
+    private Media fromSaved(UserLibrary.Entry e){
+        Media m=new Media();
+        m.id=e.id;m.type=e.type;m.name=e.title;m.poster=e.poster;
+        m.description=e.description;m.source=e.source;m.episodeId=e.episodeId;
+        return m;
+    }
+    private void details(Media m){
+        final UserLibrary.Entry e=identify(m);
+        final ArrayList<String> options=new ArrayList<>();
+        options.add("▶  Escolher reprodução / episódio");
+        if(e.canContinue() && !e.streamUrl.isEmpty())options.add("↻  Continuar de "+e.progressLabel().replace("Pausado em ",""));
+        options.add(e.liked?"♥  Remover dos curtidos":"♡  Adicionar aos curtidos");
+        options.add(e.watchLater?"✓  Remover de Assistir mais tarde":"◷  Assistir mais tarde");
+        if(e.lastPlayed>0)options.add("⌫  Remover do histórico");
+        options.add("ⓘ  Informações do título");
+        new AlertDialog.Builder(this).setTitle(m.name)
+          .setItems(options.toArray(new String[0]),(dialog,which)->{
+             String choice=options.get(which);
+             if(choice.startsWith("▶"))resolveItem(m);
+             else if(choice.startsWith("↻"))resumeEntry(library.get(e.key));
+             else if(choice.startsWith("♥")||choice.startsWith("♡")){
+                 library.liked(e.key,!library.get(e.key).liked);
+                 showPersonal();Toast.makeText(this,"Lista de curtidos atualizada",Toast.LENGTH_SHORT).show();
+             }else if(choice.startsWith("✓")||choice.startsWith("◷")){
+                 library.later(e.key,!library.get(e.key).watchLater);
+                 showPersonal();Toast.makeText(this,"Assistir mais tarde atualizado",Toast.LENGTH_SHORT).show();
+             }else if(choice.startsWith("⌫")){
+                 library.removeHistory(e.key);showPersonal();
+                 Toast.makeText(this,"Título removido do histórico",Toast.LENGTH_SHORT).show();
+             }else{
+                 message((m.description==null?"":m.description)+"\n\n"+library.get(e.key).progressLabel());
+             }
+          }).setNegativeButton("Voltar",null).show();
+    }
+    private void resumeEntry(UserLibrary.Entry e){
+        if(e.streamUrl!=null && (e.streamUrl.startsWith("http://")||e.streamUrl.startsWith("https://"))){
+            play(e.streamUrl,fromSaved(e),e.episodeId,false);
+        }else{
+            resolveItem(fromSaved(e));
+        }
+    }
+    private void showPersonal(){
+        if(personal==null||library==null)return;
+        personal.removeAllViews();
+        addPersonalRow("CONTINUAR ASSISTINDO","continue","Nenhum vídeo interrompido.");
+        addPersonalRow("ASSISTIR MAIS TARDE","later","Sua lista está vazia.");
+        addPersonalRow("CURTIDOS  ♥","liked","Marque seus favoritos no catálogo.");
+        addPersonalRow("ASSISTIDOS RECENTEMENTE","recent","Seu histórico começa quando você reproduz um vídeo.");
+    }
+    private void addPersonalRow(String title,String filter,String empty){
+        ArrayList<UserLibrary.Entry> entries=library.list(filter);
+        LinearLayout line=new LinearLayout(this);line.setGravity(Gravity.CENTER_VERTICAL);
+        TextView heading=text(title,16,AQUA,true);
+        line.addView(heading,new LinearLayout.LayoutParams(0,dp(44),1f));
+        if(!entries.isEmpty())line.addView(button("Ver todos",()->showAll(filter)));
+        personal.addView(line);
+        if(entries.isEmpty()){
+            TextView hint=text(empty,13,0xff91aaba,false);
+            hint.setPadding(dp(8),0,0,dp(11));personal.addView(hint);
+            return;
+        }
+        HorizontalScrollView scroller=new HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        scroller.setClipChildren(false);
+        LinearLayout cards=new LinearLayout(this);
+        cards.setClipChildren(false);
+        for(int i=0;i<entries.size()&&i<16;i++){
+            UserLibrary.Entry e=entries.get(i);
+            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+            card.setBackground(shape(PANEL,0xff2a4a60));
+            card.setPadding(dp(14),dp(14),dp(14),dp(12));
+            card.setFocusable(true);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(234),dp(110));cp.rightMargin=dp(12);
+            cards.addView(card,cp);
+            TextView titleView=text(e.title,15,Color.WHITE,true);
+            titleView.setMaxLines(2);card.addView(titleView);
+            TextView sub=text("continue".equals(filter)?e.progressLabel():(e.completed?"Concluído":e.type),12,0xffb3cbda,false);
+            sub.setMaxLines(2);LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(-1,-2);q.topMargin=dp(8);card.addView(sub,q);
+            if("continue".equals(filter)&&e.durationMs>0){
+                android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);bar.setProgress((int)Math.min(1000,(1000L*e.positionMs)/e.durationMs));
+                LinearLayout.LayoutParams progress=new LinearLayout.LayoutParams(-1,dp(4));progress.topMargin=dp(7);card.addView(bar,progress);
+            }
+            card.setOnFocusChangeListener((v,focus)->{
+                v.setBackground(shape(focus?PANEL2:PANEL,focus?AQUA:0xff2a4a60));
+                v.animate().scaleX(focus?1.04f:1f).scaleY(focus?1.04f:1f).setDuration(120).start();
+            });
+            card.setOnClickListener(v->{
+                if("continue".equals(filter))resumeEntry(library.get(e.key));
+                else details(fromSaved(e));
+            });
+        }
+        scroller.addView(cards);personal.addView(scroller);
+    }
+    private void showAll(String filter){
+        ArrayList<UserLibrary.Entry> entries=library.list(filter);
+        if(entries.isEmpty()){message("Nenhum título nesta seção.");return;}
+        String[] titles=new String[Math.min(180,entries.size())];
+        for(int i=0;i<titles.length;i++){
+            UserLibrary.Entry e=entries.get(i);
+            titles[i]=e.title+"   •   "+e.progressLabel();
+        }
+        AlertDialog.Builder dlg=new AlertDialog.Builder(this).setTitle(labelFor(filter))
+           .setItems(titles,(d,i)->details(fromSaved(entries.get(i))))
+           .setNegativeButton("Voltar",null);
+        if("recent".equals(filter))dlg.setNeutralButton("Limpar histórico",(d,w)->
+             new AlertDialog.Builder(this).setTitle("Limpar todo o histórico?")
+             .setMessage("Os curtidos e a lista Assistir mais tarde serão preservados.")
+             .setNegativeButton("Cancelar",null)
+             .setPositiveButton("Limpar",(dd,ww)->{library.clearHistory();showPersonal();}).show());
+        dlg.show();
+    }
+    private String labelFor(String filter){
+        if("continue".equals(filter))return "Continuar assistindo";
+        if("liked".equals(filter))return "Lista de curtidos";
+        if("later".equals(filter))return "Assistir mais tarde";
+        return "Assistidos recentemente";
+    }
+    private void showFullLibrary(){
+        new AlertDialog.Builder(this).setTitle("Minha biblioteca")
+           .setItems(new String[]{"Continuar assistindo","Assistir mais tarde","Curtidos","Histórico de reprodução"},
+               (dialog,which)->showAll(new String[]{"continue","later","liked","recent"}[which]))
+           .setNegativeButton("Fechar",null).show();
+    }
+    private void searchCatalog(){
+        EditText field=new EditText(this);field.setSingleLine(true);
+        field.setHint("Título, filme ou série");
+        LinearLayout box=new LinearLayout(this);box.setPadding(dp(24),0,dp(24),0);box.addView(field);
+        new AlertDialog.Builder(this).setTitle("Buscar nos catálogos carregados")
+          .setView(box).setNegativeButton("Cancelar",null)
+          .setPositiveButton("Buscar",(d,w)->{
+              String query=field.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
+              if(query.isEmpty())return;
+              ArrayList<Media> matched=new ArrayList<>();
+              for(Media m:knownItems)if(m.name.toLowerCase(java.util.Locale.ROOT).contains(query))matched.add(m);
+              if(matched.isEmpty()){message("Nenhum resultado nos catálogos já carregados.");return;}
+              String[] names=new String[Math.min(100,matched.size())];
+              for(int i=0;i<names.length;i++)names[i]=matched.get(i).name;
+              new AlertDialog.Builder(this).setTitle("Busca • "+matched.size()+" resultado(s)")
+                .setItems(names,(dd,i)->details(matched.get(i)))
+                .setNegativeButton("Fechar",null).show();
+          }).show();
+    }
+
     private void resolveItem(Media m) {
-        if ("series".equals(m.type)) {
+        if ("series".equals(m.type) && (m.episodeId==null||m.episodeId.isEmpty())) {
             subtitle.setText("Consultando episódios de "+m.name+"...");
             pool.execute(()->{
                 try {
@@ -267,21 +430,26 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     ArrayList<String> labels=new ArrayList<>();
-                    ArrayList<String> ids=new ArrayList<>();
+                    ArrayList<Media> episodes=new ArrayList<>();
                     for(int i=0;i<videos.length()&&i<250;i++) {
                         JSONObject episode=videos.optJSONObject(i);if(episode==null)continue;
                         String id=episode.optString("id","");
                         if(id.isEmpty())continue;
-                        ids.add(id);
-                        labels.add("T"+episode.optInt("season",0)+" E"+episode.optInt("episode",0)+"  •  "+episode.optString("title",m.name));
+                        Media item=new Media();
+                        item.id=m.id;item.type=m.type;item.episodeId=id;
+                        item.name=m.name+" • T"+episode.optInt("season",0)+" E"+episode.optInt("episode",0)
+                          +" "+episode.optString("title","");
+                        item.source=m.source;item.poster=m.poster;item.description=m.description;
+                        episodes.add(item);
+                        labels.add(item.name);
                     }
                     runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Episódios de "+m.name)
-                       .setItems(labels.toArray(new String[0]),(dialog,index)->resolveStreams(m,ids.get(index)))
+                       .setItems(labels.toArray(new String[0]),(dialog,index)->details(episodes.get(index)))
                        .setNegativeButton("Voltar",null).show());
                 }catch(Exception ex){runOnUiThread(()->message("Não foi possível consultar os episódios: "+ex.getMessage()));}
             });
         }else{
-            resolveStreams(m,m.id);
+            resolveStreams(m,(m.episodeId!=null&&!m.episodeId.isEmpty())?m.episodeId:m.id);
         }
     }
     private String encodePart(String value) throws Exception {
@@ -326,7 +494,7 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 new AlertDialog.Builder(this).setTitle(media.name+" • "+playable.size()+" stream(s)")
-                   .setItems(titles.toArray(new String[0]),(dialog,index)->play(playable.get(index),media.name))
+                   .setItems(titles.toArray(new String[0]),(dialog,index)->play(playable.get(index),media,videoId,false))
                    .setNegativeButton("Voltar",null).show();
             });
         });
@@ -372,15 +540,31 @@ public final class MainActivity extends Activity {
             .setPositiveButton("Assistir",(d,w)->{
                 String url=input.getText().toString().trim();
                 if(!(url.startsWith("https://")||url.startsWith("http://"))){message("Use um endereço HTTP(S).");return;}
-                play(url,"Reprodução direta");
+                Media direct=new Media();
+                direct.id=url;direct.type="direct";direct.name="Reprodução direta";
+                direct.episodeId="";direct.poster="";direct.description="Mídia adicionada diretamente";
+                direct.source="";play(url,direct,"",false);
             }).show();
     }
-    private void play(String url,String name){
+    private void play(String url,Media m,String videoId,boolean restart){
+        if(url==null||!(url.startsWith("http://")||url.startsWith("https://"))){
+            message("Esta fonte não tem um endereço de mídia reproduzível.");return;
+        }
+        if(m.type==null||m.type.isEmpty())m.type="movie";
+        String key="direct".equals(m.type)?UserLibrary.directKey(url):
+             ((m.episodeId!=null&&!m.episodeId.isEmpty())?
+                 UserLibrary.episodeKey(m.id,m.episodeId):UserLibrary.key(m.type,m.id));
+        library.identify(key,m.id,m.type,m.name,m.poster,m.description,m.source,m.episodeId);
         Intent intent=new Intent(this,PlayerActivity.class);
-        intent.putExtra("url",url);intent.putExtra("title",name);startActivity(intent);
+        intent.putExtra("url",url);intent.putExtra("title",m.name);
+        intent.putExtra("id",m.id);intent.putExtra("type",m.type);
+        intent.putExtra("poster",m.poster);intent.putExtra("description",m.description);
+        intent.putExtra("source",m.source);intent.putExtra("episodeId",m.episodeId);
+        intent.putExtra("libraryKey",key);intent.putExtra("restart",restart);
+        startActivity(intent);
     }
     private void message(String text){new AlertDialog.Builder(this).setTitle("Shock TV").setMessage(text).setPositiveButton("OK",null).show();}
-    private static final class Media{String id,type,name,poster,description,source;}
+    private static final class Media{String id="",type="",name="",poster="",description="",source="",episodeId="";}
     private JSONObject getJson(String url) throws Exception{
         if(!url.startsWith("https://"))throw new Exception("Fonte HTTPS necessária");
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
@@ -394,5 +578,6 @@ public final class MainActivity extends Activity {
             return new JSONObject(out.toString("UTF-8"));
         }finally{connection.disconnect();}
     }
+    @Override protected void onResume(){super.onResume();if(personal!=null)showPersonal();}
     @Override protected void onDestroy(){pool.shutdownNow();super.onDestroy();}
 }
