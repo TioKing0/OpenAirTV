@@ -85,3 +85,16 @@ Correção motivada pelo erro real `ERROR_CODE_IO_BAD_HTTP_STATUS` relatado no A
 - Não implementa BitTorrent, burlas de DRM, autorização ou licenças de conteúdo. Nenhuma URL é considerada funcional sem retorno real do servidor.
 
 Nota: compilar não garante funcionamento de URLs de terceiros. O próximo teste na TV deve registrar qual status HTTP aparece quando ocorrer uma falha.
+
+## Android TV v0.3.4 — Seleção inteligente de mídia
+
+- Descoberta das URLs diretas fornecidas pelos addons; recursos com `infoHash` sem URL HTTP(S) continuam não reproduzíveis sem motor BitTorrent.
+- Verificador `StreamProbe` testa no máximo 24 opções, com até 4 GETs simultâneos limitados a 2 KB, timeouts curtos e até 5 redirecionamentos. Suporta redirecionamentos HTTP 301/302/303/307/308 para HTTPS, sem rebaixar conexões TLS nem repassar credenciais para outro host.
+- HTTP 200 ou 206 com resposta compatível é indício de disponibilidade, **não comprova que codecs, playlists e todos os segmentos serão reproduzidos**. Páginas HTML e erros HTTP são filtrados.
+- Escolha automática da melhor opção preliminar priorizando qualidade até 1080p e metadados de português, respeitando a preferência do usuário. As categorias de resolução e idioma derivam dos rótulos enviados pelo addon e podem estar incompletas.
+- Dentro do player, menu **Qualidade**, **Idioma** e **Fontes** oferece somente opções aprovadas no teste HTTP. A seleção de faixas de áudio internas usa as faixas identificadas pelo Media3, quando disponíveis.
+- Troca de fontes sem retornar à tela do filme, preservando o tempo de reprodução, com tentativa automática de outras fontes ao ocorrer erro.
+- `DefaultHttpDataSource` permite redirecionamentos de protocolo quando não há cabeçalhos confidenciais. Cabeçalhos sensíveis nunca são reenviados para domínios de destino diferentes durante a validação e não são persistidos na biblioteca pessoal.
+- Não inclui conteúdo de demonstração, não realiza transcodificação de vídeo e não contorna autenticação/DRM. Requer validação de disponibilidade na TV real.
+
+Documentação: https://developer.android.com/reference/androidx/media3/datasource/DefaultHttpDataSource.Factory ; https://stremio.github.io/stremio-addon-sdk/api/responses/stream.html .
