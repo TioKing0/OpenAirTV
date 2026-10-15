@@ -50,3 +50,14 @@ O workflow de Android TV publica um APK debug de avaliação. Para produzir APKs
 - Identificador br.com.shocktv, dados locais e lógica do player preservados. Testes de navegação em TV real ainda necessários.
 
 Referências conceituais: https://github.com/halilozel1903/compose-tv-rails , https://github.com/azad25/homeflix-tv-app e https://developer.android.com/training/tv/playback/compose/lists . Nenhuma marca, asset ou código proprietário da Netflix foi incorporado.
+
+## V0.3.1 — Manifests Stremio predefinidos
+
+Fontes registradas por padrão, com controles de ativação/desativação persistentes no menu Fontes:
+- Cinemeta — metadados `https://v3-cinemeta.strem.io/manifest.json`
+- FenixFlix — `https://fenixflix.fenixhub.online/manifest.json`
+- Torrentio — `https://torrentio.strem.fun/manifest.json`
+- Netflix Catalog comunitário — `https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json`
+- ThePirateBay+ — `https://thepiratebay-plus.strem.fun/manifest.json`
+
+Esses endereços são armazenados como referências remotas, não incluem filmes, séries ou arquivos de mídia. Eles não implicam disponibilidade ou autorização para reprodução. O aplicativo só reproduz fontes HTTP(S) compatíveis fornecidas pelos addons ou URLs próprias; **não contém motor BitTorrent e não reproduz diretamente torrents**. Verificação de rede ocorre em runtime; addons offline são ignorados no carregamento do catálogo. O usuário pode desativar cada fonte, e suas fontes personalizadas continuam salvas. Para distribuição comercial, verificar licenças e direitos de uso.
