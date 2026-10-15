@@ -21,25 +21,27 @@ def makeImage = { int width,int height ->
     g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
     g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY)
     g.setPaint(new GradientPaint(0f,0f,new Color(6,18,31),(float)width,(float)height,new Color(14,52,76)))
-    g.fillRoundRect(0,0,width,height,Math.max(16,(int)(width*.065)),Math.max(16,(int)(height*.12)))
+    g.fillRoundRect(0,0,width,height,Math.max(16,(int)(width * 0.065d)),Math.max(16,(int)(height * 0.12d)))
     return [canvas,g]
 }
 def drawPlay = { Graphics2D g, int x,int y,int w,int h ->
     g.setColor(new Color(16,64,81))
-    g.fillRoundRect(x,y,w,h,(int)(w*.24),(int)(w*.24))
-    g.setStroke(new BasicStroke(Math.max(2f,(float)(w*.022))))
+    g.fillRoundRect(x,y,w,h,(int)(w * 0.24d),(int)(w * 0.24d))
+    g.setStroke(new BasicStroke(Math.max(2f,(float)(w * 0.022d))))
     g.setColor(new Color(80,211,226))
-    g.drawRoundRect(x,y,w,h,(int)(w*.24),(int)(w*.24))
+    g.drawRoundRect(x,y,w,h,(int)(w * 0.24d),(int)(w * 0.24d))
     Path2D.Double play=new Path2D.Double()
-    play.moveTo(x+w*.36d,y+h*.25d)
-    play.lineTo(x+w*.36d,y+h*.75d)
-    play.lineTo(x+w*.77d,y+h*.50d)
+    play.moveTo(x+w * 0.36d,y+h * 0.25d)
+    play.lineTo(x+w * 0.36d,y+h * 0.75d)
+    play.lineTo(x+w * 0.77d,y+h * 0.50d)
     play.closePath()
     g.setColor(new Color(130,236,241))
     g.fill(play)
 }
 def brandBanner={ ->
-    def (BufferedImage out,Graphics2D g)=makeImage(320,180)
+    def parts=makeImage(320,180)
+    BufferedImage out=(BufferedImage)parts[0]
+    Graphics2D g=(Graphics2D)parts[1]
     drawPlay(g,24,31,93,118)
     g.setColor(new Color(243,251,255))
     g.setFont(new Font("SansSerif",Font.BOLD,48))
@@ -53,7 +55,9 @@ def brandBanner={ ->
     return out
 }
 def brandIcon={ ->
-    def (BufferedImage out,Graphics2D g)=makeImage(192,192)
+    def parts=makeImage(192,192)
+    BufferedImage out=(BufferedImage)parts[0]
+    Graphics2D g=(Graphics2D)parts[1]
     drawPlay(g,28,18,136,146)
     g.setColor(new Color(245,250,255))
     g.setFont(new Font("SansSerif",Font.BOLD,26))
