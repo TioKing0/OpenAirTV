@@ -1,0 +1,79 @@
+/*
+ * Shock TV brand assets generated locally by Gradle, no external image host or PC setup.
+ * Android TV launchers require a 320x180 xhdpi banner with legible branding.
+ * Generates PNGs from Java2D on the Gradle JDK. Safe to rerun on any CI build.
+ */
+import java.awt.BasicStroke
+import java.awt.Color
+import java.awt.Font
+import java.awt.GradientPaint
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.geom.Path2D
+import java.awt.geom.RoundRectangle2D
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
+
+def makeImage = { int width,int height ->
+    BufferedImage canvas=new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB)
+    Graphics2D g=canvas.createGraphics()
+    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON)
+    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+    g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY)
+    g.setPaint(new GradientPaint(0f,0f,new Color(6,18,31),(float)width,(float)height,new Color(14,52,76)))
+    g.fillRoundRect(0,0,width,height,Math.max(16,(int)(width*.065)),Math.max(16,(int)(height*.12)))
+    return [canvas,g]
+}
+def drawPlay = { Graphics2D g, int x,int y,int w,int h ->
+    g.setColor(new Color(16,64,81))
+    g.fillRoundRect(x,y,w,h,(int)(w*.24),(int)(w*.24))
+    g.setStroke(new BasicStroke(Math.max(2f,(float)(w*.022))))
+    g.setColor(new Color(80,211,226))
+    g.drawRoundRect(x,y,w,h,(int)(w*.24),(int)(w*.24))
+    Path2D.Double play=new Path2D.Double()
+    play.moveTo(x+w*.36d,y+h*.25d)
+    play.lineTo(x+w*.36d,y+h*.75d)
+    play.lineTo(x+w*.77d,y+h*.50d)
+    play.closePath()
+    g.setColor(new Color(130,236,241))
+    g.fill(play)
+}
+def brandBanner={ ->
+    def (BufferedImage out,Graphics2D g)=makeImage(320,180)
+    drawPlay(g,24,31,93,118)
+    g.setColor(new Color(243,251,255))
+    g.setFont(new Font("SansSerif",Font.BOLD,48))
+    g.drawString("SHOCK",134,99)
+    g.setColor(new Color(100,225,237))
+    g.setFont(new Font("SansSerif",Font.BOLD,28))
+    g.drawString("TV",136,132)
+    g.setStroke(new BasicStroke(3f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND))
+    g.drawLine(136,140,285,140)
+    g.dispose()
+    return out
+}
+def brandIcon={ ->
+    def (BufferedImage out,Graphics2D g)=makeImage(192,192)
+    drawPlay(g,28,18,136,146)
+    g.setColor(new Color(245,250,255))
+    g.setFont(new Font("SansSerif",Font.BOLD,26))
+    g.drawString("SHOCK",46,176)
+    g.dispose()
+    return out
+}
+tasks.register("generateTvBranding") {
+    def bannerFile=file("src/main/res/drawable-xhdpi/shock_tv_banner.png")
+    def iconFile=file("src/main/res/drawable-nodpi/shock_tv_icon.png")
+    outputs.files(bannerFile,iconFile)
+    doLast {
+        System.setProperty("java.awt.headless","true")
+        bannerFile.parentFile.mkdirs()
+        iconFile.parentFile.mkdirs()
+        ImageIO.write(brandBanner(),"png",bannerFile)
+        ImageIO.write(brandIcon(),"png",iconFile)
+        if(!bannerFile.exists()||bannerFile.length()<1000||!iconFile.exists())
+            throw new GradleException("Launcher asset generation failed")
+        logger.lifecycle("Shock TV launcher branding generated: banner 320x180 and icon 192x192")
+    }
+}
+tasks.named("preBuild") { dependsOn(tasks.named("generateTvBranding")) }

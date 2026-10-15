@@ -6,8 +6,8 @@ android {
     applicationId 'br.com.shocktv'
     minSdk 23
     targetSdk 34
-    versionCode 7
-    versionName '0.3.4'
+    versionCode 8
+    versionName '0.3.5'
   }
   buildFeatures { buildConfig true }
   signingConfigs {
@@ -34,3 +34,5 @@ dependencies {
   implementation 'androidx.media3:media3-exoplayer-dash:1.5.1'
   implementation 'androidx.media3:media3-ui:1.5.1'
 }
+
+apply from: 'branding.gradle'

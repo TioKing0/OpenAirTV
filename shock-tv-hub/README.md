@@ -98,3 +98,12 @@ Nota: compilar não garante funcionamento de URLs de terceiros. O próximo teste
 - Não inclui conteúdo de demonstração, não realiza transcodificação de vídeo e não contorna autenticação/DRM. Requer validação de disponibilidade na TV real.
 
 Documentação: https://developer.android.com/reference/androidx/media3/datasource/DefaultHttpDataSource.Factory ; https://stremio.github.io/stremio-addon-sdk/api/responses/stream.html .
+
+
+## Android TV 0.3.5 — atalho na tela inicial
+
+O app agora possui um banner real 320×180 px com o nome Shock TV e ícone 192×192, gerados pelo Gradle via Java2D e incluídos automaticamente no APK. O AndroidManifest declara `android.software.leanback`, touchscreen e gamepad opcionais, e `MAIN/LEANBACK_LAUNCHER` na atividade que será aberta pelo launcher. O banner e o ícone foram atribuídos tanto no nível da aplicação quanto na atividade.
+
+O GitHub Actions verifica a presença do banner gerado e usa `aapt dump badging` para confirmar que o pacote contém uma atividade lançável pela Android TV. Isso corrige a identificação do APK no menu **Apps**; por decisão do launcher, o usuário ainda pode precisar adicionar o app à fileira de favoritos/home manualmente. Não é possível obrigar launchers de terceiros a fixar um app automaticamente.
+
+Assinatura: este APK ainda é uma compilação de avaliação, e trocas da assinatura debug podem impedir atualizações in-place. Para evitar perda das preferências de fontes, histórico e curtidos, é essencial preparar a assinatura de lançamento estável antes de distribuir a versão comercial.

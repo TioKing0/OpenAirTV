@@ -37,10 +37,20 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK
         run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify Android TV launcher
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          if [ -z "$AAPT" ]; then echo "aapt not found"; exit 1; fi
+          "$AAPT" dump badging "$APK" | tee /tmp/shock-tv-badging.txt
+          grep -q '^leanback-launchable-activity:' /tmp/shock-tv-badging.txt
+          grep -q "application-icon-" /tmp/shock-tv-badging.txt
+          test -s app/src/main/res/drawable-xhdpi/shock_tv_banner.png
+          test -s app/src/main/res/drawable-nodpi/shock_tv_icon.png
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-AndroidTV-v0.3.4-APK-PREVIEW
+          name: Shock-TV-AndroidTV-v0.3.5-APK-PREVIEW
           path: shock-tv-hub/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -70,7 +80,7 @@ jobs:
         if: env.SHOCK_RELEASE_READY == '1'
         uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-v0.3.4-SIGNED-RELEASE
+          name: Shock-TV-v0.3.5-SIGNED-RELEASE
           path: shock-tv-hub/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
