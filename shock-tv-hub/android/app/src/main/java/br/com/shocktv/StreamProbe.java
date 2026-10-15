@@ -126,10 +126,10 @@ public final class StreamProbe {
                 }catch(Exception e){
                     report.checked++;report.failed++;
                     if(report.firstFailure.isEmpty())report.firstFailure="Falha de rede ou resposta inválida";
+                    if(e instanceof InterruptedException){Thread.currentThread().interrupt();break;}
                 }
             }
-        }catch(InterruptedException e){Thread.currentThread().interrupt();}
-        finally{workers.shutdownNow();}
+        }finally{workers.shutdownNow();}
         report.available.sort((a,b)->Integer.compare(score(b),score(a)));
         return report;
     }
