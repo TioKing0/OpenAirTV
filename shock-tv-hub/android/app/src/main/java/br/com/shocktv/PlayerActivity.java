@@ -96,12 +96,15 @@ public final class PlayerActivity extends Activity {
                     if(reason==Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && currentKey!=null){
                         UserLibrary.Entry previous=library.get(currentKey);
                         library.progress(currentKey,previous.durationMs,previous.durationMs,true);
-                    }else save(false);
+                    }
+                    UserLibrary.Entry nextProgress=library.get(next);
+                    long nextPosition=nextProgress.canContinue()?nextProgress.positionMs:0L;
                     currentKey=next;
                     markedFinished=false;
                     String stream=mediaItem.localConfiguration!=null?
                         mediaItem.localConfiguration.uri.toString():"";
                     library.start(currentKey,stream);
+                    if(nextPosition>=5000L)player.seekTo(nextPosition);
                 }
             }
         });
