@@ -111,9 +111,7 @@ public final class MainActivity extends Activity {
         subtitle=text("Carregando catálogos...",14,0xff85a7ba,false);
         LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,-2);slp.topMargin=dp(15);
         content.addView(subtitle,slp);
-        content.addView(text("CONTEÚDO LIVRE PARA TESTAR O PLAYER",16,AQUA,true));
-        addDemoRow();
-        content.addView(text("Os addons fornecem metadados. A disponibilidade de reprodução depende da fonte e das permissões de uso.",12,0xff819baa,false));
+        content.addView(text("Catálogos reais carregados dos seus addons. Sem itens de demonstração.",12,0xff819baa,false));
         setContentView(scroll);
     }
 
@@ -126,40 +124,6 @@ public final class MainActivity extends Activity {
         b.setOnClickListener(v->task.run());b.setOnFocusChangeListener((v,f)->v.animate().scaleX(f?1.05f:1f).scaleY(f?1.05f:1f).setDuration(125).start());
         return b;
     }
-    private void addDemoRow(){
-        LinearLayout section=new LinearLayout(this);section.setOrientation(LinearLayout.HORIZONTAL);section.setGravity(Gravity.CENTER_VERTICAL);
-        String[][] demos={
-           {"Big Buck Bunny","Blender Foundation • Exemplo público","https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"},
-           {"Elephants Dream","Blender Foundation • Exemplo público","https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"},
-           {"Sintel","Blender Foundation • Exemplo público","https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"}
-        };
-        for(String[] data:demos){
-           LinearLayout item=tile(data[0],data[1]);
-           item.setOnClickListener(v->play(data[2],data[0]));
-           section.addView(item);
-        }
-        HorizontalScrollView hsv=new HorizontalScrollView(this);hsv.setHorizontalScrollBarEnabled(false);hsv.addView(section);
-        content.addView(hsv,new LinearLayout.LayoutParams(-1,dp(150)));
-    }
-    private LinearLayout tile(String name,String secondary) {
-        LinearLayout item=new LinearLayout(this);
-        item.setOrientation(LinearLayout.VERTICAL);item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(dp(20),dp(18),dp(20),dp(16));
-        item.setBackground(shape(PANEL,0xff2a4a60));
-        item.setFocusable(true);
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(219),dp(122));p.rightMargin=dp(14);
-        item.setLayoutParams(p);
-        TextView title=text(name,18,Color.WHITE,true);title.setMaxLines(2);
-        item.addView(title);
-        TextView desc=text(secondary,12,0xffb1cada,false);desc.setMaxLines(2);
-        LinearLayout.LayoutParams dlp=new LinearLayout.LayoutParams(-1,-2);dlp.topMargin=dp(12);item.addView(desc,dlp);
-        item.setOnFocusChangeListener((v,focused)->{
-            v.setBackground(shape(focused?PANEL2:PANEL,focused?AQUA:0xff2a4a60));
-            v.animate().scaleX(focused?1.04f:1f).scaleY(focused?1.04f:1f).setDuration(120).start();
-        });
-        return item;
-    }
-
     private void addSourceDialog() {
         EditText field=new EditText(this);
         field.setSingleLine(true);
@@ -283,12 +247,120 @@ public final class MainActivity extends Activity {
             }catch(Exception ignored){}
         });
     }
+    /** Catalog metadata is separate from playable streams. Never imply that an item is playable before checking. */
     private void details(Media m){
         new AlertDialog.Builder(this).setTitle(m.name)
-          .setMessage(m.description+"\n\nFonte: "+m.source+"\nTipo: "+m.type+
-          "\n\nEste é um catálogo de metadados. Para reproduzir, use uma URL de mídia que você tenha permissão para acessar.")
-          .setNegativeButton("Voltar",null)
-          .setPositiveButton("Reproduzir URL própria",(d,w)->playDirect()).show();
+          .setMessage(m.description+"\n\nConsultaremos as fontes conectadas para encontrar um stream reproduzível.")
+          .setNegativeButton("Cancelar",null)
+          .setPositiveButton("Encontrar reprodução",(d,w)->resolveItem(m))
+          .show();
+    }
+    private void resolveItem(Media m) {
+        if ("series".equals(m.type)) {
+            subtitle.setText("Consultando episódios de "+m.name+"...");
+            pool.execute(()->{
+                try {
+                    JSONObject meta=getJson(m.source+"meta/"+m.type+"/"+encodePart(m.id)+".json").optJSONObject("meta");
+                    JSONArray videos=meta!=null?meta.optJSONArray("videos"):null;
+                    if(videos==null||videos.length()==0) {
+                        runOnUiThread(()->message("Este catálogo ainda não informou episódios reproduzíveis."));
+                        return;
+                    }
+                    ArrayList<String> labels=new ArrayList<>();
+                    ArrayList<String> ids=new ArrayList<>();
+                    for(int i=0;i<videos.length()&&i<250;i++) {
+                        JSONObject episode=videos.optJSONObject(i);if(episode==null)continue;
+                        String id=episode.optString("id","");
+                        if(id.isEmpty())continue;
+                        ids.add(id);
+                        labels.add("T"+episode.optInt("season",0)+" E"+episode.optInt("episode",0)+"  •  "+episode.optString("title",m.name));
+                    }
+                    runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Episódios de "+m.name)
+                       .setItems(labels.toArray(new String[0]),(dialog,index)->resolveStreams(m,ids.get(index)))
+                       .setNegativeButton("Voltar",null).show());
+                }catch(Exception ex){runOnUiThread(()->message("Não foi possível consultar os episódios: "+ex.getMessage()));}
+            });
+        }else{
+            resolveStreams(m,m.id);
+        }
+    }
+    private String encodePart(String value) throws Exception {
+        return URLEncoder.encode(value,"UTF-8").replace("+","%20");
+    }
+    /** Query stream resource only from addons which declare stream capability. */
+    private void resolveStreams(Media media,String videoId) {
+        subtitle.setText("Buscando streams para "+media.name+"...");
+        pool.execute(()->{
+            ArrayList<String> playable=new ArrayList<>();
+            ArrayList<String> titles=new ArrayList<>();
+            ArrayList<String> sourcesChecked=new ArrayList<>(sources);
+            for(String manifestUrl:sourcesChecked) {
+                try {
+                    JSONObject manifest=getJson(manifestUrl);
+                    if(!supportsStreams(manifest,media.type,videoId))continue;
+                    String root=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
+                    JSONObject response=getJson(root+"stream/"+encodePart(media.type)+"/"+encodePart(videoId)+".json");
+                    JSONArray streams=response.optJSONArray("streams");
+                    if(streams==null)continue;
+                    for(int i=0;i<streams.length()&&i<30;i++) {
+                        JSONObject stream=streams.optJSONObject(i);
+                        if(stream==null)continue;
+                        String url=stream.optString("url","");
+                        if(!(url.startsWith("https://")||url.startsWith("http://")))continue;
+                        // Native Media3 supports HTTP(S) streams. Torrent hashes and external pages are not media URLs.
+                        if(stream.optJSONObject("behaviorHints")!=null &&
+                             stream.optJSONObject("behaviorHints").optJSONObject("proxyHeaders")!=null)continue;
+                        if(playable.contains(url))continue;
+                        playable.add(url);
+                        String label=stream.optString("name","Stream");
+                        String desc=stream.optString("title",stream.optString("description",""));
+                        titles.add(manifest.optString("name","Addon")+" • "+label+(desc.isEmpty()?"":" • "+desc));
+                    }
+                }catch(Exception ignored){}
+            }
+            runOnUiThread(()->{
+                subtitle.setText("CATÁLOGOS DISPONÍVEIS • "+sources.size()+" FONTE(S)");
+                if(playable.size()==0) {
+                    message("Nenhuma fonte de reprodução HTTP(S) compatível foi encontrada para \""+media.name+
+                      "\". Metadados não garantem reprodução. Adicione um addon que forneça streams acessíveis.");
+                    return;
+                }
+                new AlertDialog.Builder(this).setTitle(media.name+" • "+playable.size()+" stream(s)")
+                   .setItems(titles.toArray(new String[0]),(dialog,index)->play(playable.get(index),media.name))
+                   .setNegativeButton("Voltar",null).show();
+            });
+        });
+    }
+    private boolean supportsStreams(JSONObject manifest,String type,String id) {
+        JSONArray resources=manifest.optJSONArray("resources");
+        if(resources==null)return false;
+        boolean supports=false;
+        for(int i=0;i<resources.length();i++) {
+            Object resource=resources.opt(i);
+            if("stream".equals(resource)){supports=true;break;}
+            if(resource instanceof JSONObject) {
+                JSONObject r=(JSONObject)resource;
+                if(!"stream".equals(r.optString("name")))continue;
+                JSONArray types=r.optJSONArray("types");
+                if(types!=null && !contains(types,type))continue;
+                JSONArray prefixes=r.optJSONArray("idPrefixes");
+                if(prefixes!=null && !startsWithAny(prefixes,id))continue;
+                supports=true;break;
+            }
+        }
+        if(!supports)return false;
+        JSONArray types=manifest.optJSONArray("types");
+        if(types!=null&&!contains(types,type))return false;
+        JSONArray prefixes=manifest.optJSONArray("idPrefixes");
+        return prefixes==null||startsWithAny(prefixes,id);
+    }
+    private boolean contains(JSONArray arr,String value) {
+        for(int i=0;i<arr.length();i++)if(value.equals(arr.optString(i)))return true;
+        return false;
+    }
+    private boolean startsWithAny(JSONArray arr,String id) {
+        for(int i=0;i<arr.length();i++)if(id.startsWith(arr.optString(i,"!NOT_A_PREFIX")))return true;
+        return false;
     }
     private void playDirect(){
         EditText input=new EditText(this);input.setSingleLine(true);input.setHint("https://.../video.mp4 ou playlist.m3u8");
