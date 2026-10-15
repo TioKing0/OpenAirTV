@@ -286,6 +286,7 @@ public final class MainActivity extends Activity {
         final ArrayList<String> options=new ArrayList<>();
         options.add("▶  Escolher reprodução / episódio");
         if(e.canContinue() && !e.streamUrl.isEmpty())options.add("↻  Continuar de "+e.progressLabel().replace("Pausado em ",""));
+        if(e.canContinue() && !e.streamUrl.isEmpty())options.add("⟲  Recomeçar do início");
         options.add(e.liked?"♥  Remover dos curtidos":"♡  Adicionar aos curtidos");
         options.add(e.watchLater?"✓  Remover de Assistir mais tarde":"◷  Assistir mais tarde");
         if(e.lastPlayed>0)options.add("⌫  Remover do histórico");
@@ -295,6 +296,10 @@ public final class MainActivity extends Activity {
              String choice=options.get(which);
              if(choice.startsWith("▶"))resolveItem(m);
              else if(choice.startsWith("↻"))resumeEntry(library.get(e.key));
+             else if(choice.startsWith("⟲")){
+                 UserLibrary.Entry fresh=library.get(e.key);
+                 play(fresh.streamUrl,fromSaved(fresh),fresh.episodeId,true);
+             }
              else if(choice.startsWith("♥")||choice.startsWith("♡")){
                  library.liked(e.key,!library.get(e.key).liked);
                  showPersonal();Toast.makeText(this,"Lista de curtidos atualizada",Toast.LENGTH_SHORT).show();
