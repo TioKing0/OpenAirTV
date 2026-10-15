@@ -1,0 +1,7 @@
+body { margin:0; background:#0d121b; color:#f0f7ff; font-family:Arial, sans-serif; }
+.app { width:850px; margin:95px auto; }
+.eyebrow { color:#69b8ff; letter-spacing:7px; font-size:18px; }
+h1 { margin:24px 0; font-size:57px; }
+p { color:#b8c8d9; font-size:26px; line-height:1.35; }
+#status { border:2px solid #69b8ff; padding:25px 30px; margin-top:35px; font-size:28px; color:#ffffff; }
+.foot { font-size:19px; margin-top:35px; }

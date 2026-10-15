@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget>
+  <ThumbIcon>images/thumb.png</ThumbIcon>
+  <BigThumbIcon>images/bigthumb.png</BigThumbIcon>
+  <type itemtype="string">user</type>
+  <ver itemtype="string">{{VERSION}}</ver>
+  <mgver itemtype="string">1.0</mgver>
+  <fullwidget itemtype="boolean">y</fullwidget>
+  <srcctl itemtype="boolean">y</srcctl>
+  <ticker itemtype="boolean">n</ticker>
+  <childlock itemtype="boolean">n</childlock>
+  <audiomute itemtype="boolean">n</audiomute>
+  <videomute itemtype="boolean">n</videomute>
+  <dcont itemtype="string">y</dcont>
+  <widgetname itemtype="string">Legacy TV Hub</widgetname>
+  <description itemtype="string">Diagnostico integrado</description>
+  <width itemtype="number">960</width>
+  <height itemtype="number">540</height>
+</widget>
