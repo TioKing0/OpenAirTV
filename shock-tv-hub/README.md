@@ -70,3 +70,18 @@ Corrige a navegação de séries reportada após V0.3.1. No protocolo Stremio, u
 As respostas são verificadas por status HTTP, protocolo HTTPS e formato JSON. Páginas HTML e erros de CDN passam a ser tratados como fonte indisponível, não como dados de episódios. O aplicativo continua sem motor BitTorrent: addons com apenas `infoHash` não disponibilizam mídia reproduzível em Media3. A resposta HTTP(S) de um addon não prova que sua mídia está disponível ou pode ser redistribuída comercialmente.
 
 Referência de protocolo: https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/protocol.md . Também será necessário validar manualmente o fluxo na Android TV física.
+
+
+## V0.3.3 – Tratamento de falhas HTTP na reprodução
+
+Correção motivada pelo erro real `ERROR_CODE_IO_BAD_HTTP_STATUS` relatado no Android TV.
+
+- O player Media3 inspeciona a exceção HTTP real e informa o status do servidor (por exemplo 401/403/404/416/429/503), distinguindo URL expirada, acesso restrito, arquivo removido e instabilidade.
+- Quando ocorre erro, apresenta opções de tentar novamente ou retornar para selecionar outra fonte, em vez de permanecer em tela preta.
+- Entradas `streams[].url` são candidatos, não confirmação de vídeo reproduzível. O app diferencia opções BitTorrent `infoHash`, links externos e URLs HTTP(S), evitando enviar hashes ao player.
+- Respeita, nas URLs de mídia, os cabeçalhos seguros de requisição declarados em `behaviorHints.proxyHeaders.request`; só envia tokens Authorization/Cookie usando HTTPS. Nenhum desses dados é salvo na biblioteca.
+- Força reconhecimento de MIME HLS para URLs `.m3u8` e DASH para `.mpd` quando informado pela extensão.
+- Só registra uma reprodução no histórico depois que o Media3 alcança o estado READY. Uma tentativa falha não apaga um progresso anterior.
+- Não implementa BitTorrent, burlas de DRM, autorização ou licenças de conteúdo. Nenhuma URL é considerada funcional sem retorno real do servidor.
+
+Nota: compilar não garante funcionamento de URLs de terceiros. O próximo teste na TV deve registrar qual status HTTP aparece quando ocorrer uma falha.

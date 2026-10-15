@@ -1056,8 +1056,7 @@ public final class MainActivity extends Activity {
                 }
                 String[] choices=new String[candidates.size()];
                 for(int i=0;i<choices.length;i++)choices[i]=candidates.get(i).label;
-                new AlertDialog.Builder(this).setTitle(media.name+" • "+candidates.size()+" fonte(s) HTTP(S)")
-                   .setMessage("A disponibilidade será confirmada pelo servidor ao iniciar a reprodução.")
+                new AlertDialog.Builder(this).setTitle(media.name+" • "+candidates.size()+" URL(s) de mídia")
                    .setItems(choices,(dialog,index)->{
                        StreamCandidate c=candidates.get(index);
                        play(c.url,media,videoId,false,c.headerNames,c.headerValues);
