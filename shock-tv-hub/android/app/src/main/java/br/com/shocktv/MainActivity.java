@@ -987,7 +987,7 @@ public final class MainActivity extends Activity {
             ArrayList<String> sourcesChecked=new ArrayList<>(sources);
             for(String manifestUrl:sourcesChecked) {
                 try {
-                    JSONObject manifest=getJson(manifestUrl);
+                    JSONObject manifest=getManifest(manifestUrl);
                     if(!supportsStreams(manifest,media.type,videoId))continue;
                     String root=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
                     JSONObject response=getJson(root+"stream/"+encodePart(media.type)+"/"+encodePart(videoId)+".json");
@@ -1022,28 +1022,27 @@ public final class MainActivity extends Activity {
             });
         });
     }
-    private boolean supportsStreams(JSONObject manifest,String type,String id) {
+    private boolean supportsStreams(JSONObject manifest,String type,String videoId){
+        return supportsResource(manifest,"stream",type,videoId);
+    }
+    /** Protocol filtering: per-resource type/prefix declarations OVERRIDE manifest-wide defaults. */
+    private boolean supportsResource(JSONObject manifest,String resourceName,String type,String id){
         JSONArray resources=manifest.optJSONArray("resources");
         if(resources==null)return false;
-        boolean supports=false;
-        for(int i=0;i<resources.length();i++) {
+        for(int i=0;i<resources.length();i++){
             Object resource=resources.opt(i);
-            if("stream".equals(resource)){supports=true;break;}
-            if(resource instanceof JSONObject) {
-                JSONObject r=(JSONObject)resource;
-                if(!"stream".equals(r.optString("name")))continue;
-                JSONArray types=r.optJSONArray("types");
-                if(types!=null && !contains(types,type))continue;
-                JSONArray prefixes=r.optJSONArray("idPrefixes");
-                if(prefixes!=null && !startsWithAny(prefixes,id))continue;
-                supports=true;break;
-            }
+            JSONObject qualified=resource instanceof JSONObject?(JSONObject)resource:null;
+            if(qualified==null && !resourceName.equals(resource))continue;
+            if(qualified!=null && !resourceName.equals(qualified.optString("name")))continue;
+            JSONArray types=qualified!=null&&qualified.has("types")?
+                qualified.optJSONArray("types"):manifest.optJSONArray("types");
+            JSONArray prefixes=qualified!=null&&qualified.has("idPrefixes")?
+                qualified.optJSONArray("idPrefixes"):manifest.optJSONArray("idPrefixes");
+            if(types!=null&&!contains(types,type))continue;
+            if(prefixes!=null&&prefixes.length()>0&&!startsWithAny(prefixes,id))continue;
+            return true;
         }
-        if(!supports)return false;
-        JSONArray types=manifest.optJSONArray("types");
-        if(types!=null&&!contains(types,type))return false;
-        JSONArray prefixes=manifest.optJSONArray("idPrefixes");
-        return prefixes==null||startsWithAny(prefixes,id);
+        return false;
     }
     private boolean contains(JSONArray arr,String value) {
         for(int i=0;i<arr.length();i++)if(value.equals(arr.optString(i)))return true;
@@ -1089,16 +1088,40 @@ public final class MainActivity extends Activity {
     private void message(String text){new AlertDialog.Builder(this).setTitle("Shock TV").setMessage(text).setPositiveButton("OK",null).show();}
     private static final class Media{String id="",type="",name="",poster="",description="",source="",episodeId="",origin="",catalogId="",genre="";}
     private JSONObject getJson(String url) throws Exception{
-        if(!url.startsWith("https://"))throw new Exception("Fonte HTTPS necessária");
+        if(!url.startsWith("https://"))throw new IOException("Este addon exige conexão HTTPS.");
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
-        connection.setConnectTimeout(8000);connection.setReadTimeout(12000);
+        connection.setConnectTimeout(6000);
+        connection.setReadTimeout(8500);
         connection.setRequestProperty("Accept","application/json");
-        connection.setRequestProperty("User-Agent","ShockTV/0.1");
+        connection.setRequestProperty("User-Agent","ShockTV/0.3.2");
         connection.setInstanceFollowRedirects(true);
-        try(InputStream in=connection.getInputStream()){
-            ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;
-            while((n=in.read(buffer))!=-1){out.write(buffer,0,n);if(out.size()>3000000)throw new Exception("Resposta excede 3 MB");}
-            return new JSONObject(out.toString("UTF-8"));
+        try{
+            int code=connection.getResponseCode();
+            if(code<200||code>=300)throw new IOException("Servidor retornou HTTP "+code);
+            if(!"https".equalsIgnoreCase(connection.getURL().getProtocol()))
+                throw new IOException("Redirecionamento para conexão não segura.");
+            byte[] response;
+            try(InputStream in=connection.getInputStream();
+                ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                byte[] buffer=new byte[8192];int n;
+                while((n=in.read(buffer))!=-1){
+                    out.write(buffer,0,n);
+                    if(out.size()>3000000)throw new IOException("Resposta muito grande.");
+                }
+                response=out.toByteArray();
+            }
+            String content=new String(response,java.nio.charset.StandardCharsets.UTF_8).trim();
+            if(content.startsWith("\uFEFF"))content=content.substring(1).trim();
+            if(content.startsWith("<")){
+                throw new IOException("O servidor enviou uma página HTML em vez de dados JSON.");
+            }
+            if(!content.startsWith("{")){
+                throw new IOException("O addon retornou um formato de dados incompatível.");
+            }
+            try{return new JSONObject(content);}
+            catch(org.json.JSONException ex){
+                throw new IOException("O addon retornou JSON inválido.",ex);
+            }
         }finally{connection.disconnect();}
     }
     @Override protected void onResume(){super.onResume();if(personal!=null)showPersonal();}
