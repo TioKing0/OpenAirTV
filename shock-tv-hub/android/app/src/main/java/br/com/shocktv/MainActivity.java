@@ -1036,7 +1036,28 @@ public final class MainActivity extends Activity {
             final int skippedTorrents=torrents,skippedExternal=external,skippedBad=bad,failedAddons=failed;
             final int candidateCount=candidates.size();
             // Bounded concurrency and a short-range GET: an HTTP success is preliminary, not proof of decodability.
+            if(!candidates.isEmpty())runOnUiThread(()->{
+                if(!isFinishing())Toast.makeText(this,
+                    "Verificando "+Math.min(24,candidates.size())+" fontes de reprodução…",
+                    Toast.LENGTH_SHORT).show();
+            });
             StreamProbe.Report checked=StreamProbe.verify(candidates);
+            // Respect preferences selected in the player without claiming all streams will decode.
+            android.content.SharedPreferences settings=
+                getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE);
+            final String preferredQuality=settings.getString("quality","");
+            final String preferredLanguage=settings.getString("language","");
+            if(!preferredQuality.isEmpty()||!preferredLanguage.isEmpty()){
+                checked.available.sort((left,right)->{
+                    int leftScore=StreamProbe.score(left)
+                        +(!preferredQuality.isEmpty()&&preferredQuality.equals(left.quality)?60:0)
+                        +(!preferredLanguage.isEmpty()&&preferredLanguage.equals(left.language)?50:0);
+                    int rightScore=StreamProbe.score(right)
+                        +(!preferredQuality.isEmpty()&&preferredQuality.equals(right.quality)?60:0)
+                        +(!preferredLanguage.isEmpty()&&preferredLanguage.equals(right.language)?50:0);
+                    return Integer.compare(rightScore,leftScore);
+                });
+            }
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
