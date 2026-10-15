@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+def product = new groovy.json.JsonSlurper().parse(rootProject.file('product.json'))
+android {
+  namespace 'br.com.legacytvhub.manager'
+  compileSdk 35
+  defaultConfig {
+    applicationId 'br.com.legacytvhub.manager'
+    minSdk 26
+    targetSdk 35
+    versionCode product.androidVersionCode as int
+    versionName product.version as String
+  }
+  buildFeatures { buildConfig true }
+  signingConfigs {
+    release {
+      if (System.getenv('LTH_SIGNING_STORE')) {
+        storeFile file(System.getenv('LTH_SIGNING_STORE'))
+        storePassword System.getenv('LTH_SIGNING_STORE_PASSWORD')
+        keyAlias System.getenv('LTH_SIGNING_KEY_ALIAS')
+        keyPassword System.getenv('LTH_SIGNING_KEY_PASSWORD')
+      }
+    }
+  }
+  buildTypes {
+    release { minifyEnabled false; signingConfig signingConfigs.release }
+    debug { debuggable true }
+  }
+  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
