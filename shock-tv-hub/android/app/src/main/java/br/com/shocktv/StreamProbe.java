@@ -207,7 +207,7 @@ public final class StreamProbe {
                               p.endsWith(".mp4")||p.endsWith(".webm")||p.endsWith(".mkv")||
                               p.endsWith(".ts")||p.endsWith(".m4v");
                 if(!manifestHls&&!manifestDash&&!media)return null;
-                Option good=fromJson(original.toJson());
+                Option good=Option.fromJson(original.toJson());
                 good.url=current.toString();
                 good.latencyMs=System.currentTimeMillis()-start;
                 good.mime=manifestHls?"application/x-mpegURL":manifestDash?"application/dash+xml":mime;
