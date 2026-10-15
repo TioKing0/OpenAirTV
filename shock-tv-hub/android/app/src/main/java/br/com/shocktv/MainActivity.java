@@ -354,9 +354,7 @@ public final class MainActivity extends Activity {
             labels.add("●  "+url);
         }
         new AlertDialog.Builder(this)
-          .setTitle("Fontes • "+sources.size()+" ativa(s)")
-          .setMessage("Os addons predefinidos podem ser ativados ou desativados. "
-                    +"Fontes de torrent exigem mecanismo próprio e não são reproduzidas diretamente pelo Media3.")
+          .setTitle("Fontes • "+sources.size()+" ativa(s) • Selecione para alternar")
           .setItems(labels.toArray(new String[0]),(dialog,which)->{
               String url=all.get(which);
               if(isBundled(url)){
@@ -378,6 +376,8 @@ public final class MainActivity extends Activity {
               }
           })
           .setPositiveButton("Adicionar fonte",(d,w)->addSourceDialog())
+          .setNeutralButton("Sobre", (d,w)->message("Os addons predefinidos podem ser ativados ou desativados. "+
+              "Algumas fontes oferecem só metadados, outras oferecem torrents. O Media3 não reproduz torrents diretamente."))
           .setNegativeButton("Fechar",null).show();
     }
     private void loadSource(String manifestUrl){
