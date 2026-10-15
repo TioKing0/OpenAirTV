@@ -43,17 +43,17 @@ final class LocalWidgetServer {
         try {
             widgetAsset = null;
             for (String name : context.getAssets().list("")) {
-                if (name.startsWith("LegacyTVHub_") && name.endsWith(".zip")) {
+                if (name.equals("LegacyTVHub_" + BuildConfig.VERSION_NAME + ".zip")) {
                     if (widgetAsset != null) throw new IOException("Widgets duplicados");
                     widgetAsset = name;
                 }
             }
             if (widgetAsset == null) throw new IOException("Pacote Samsung não encontrado dentro do APK");
-            socket = new ServerSocket(80, 4, InetAddress.getByName("0.0.0.0"));
+            socket = new ServerSocket(8080, 4, InetAddress.getByName("0.0.0.0"));
             active.set(true);
         } catch (Exception error) {
-            listener.changed("A sincronização não pôde começar: " + error.getMessage()
-                + "\nA Samsung pode exigir a porta 80, bloqueada sem privilégios especiais.");
+            listener.changed("Não foi possível iniciar o diagnóstico: " + error.getMessage()
+                + "\nVerifique se a porta 8080 está ocupada e se a rede está disponível.");
             return;
         }
         worker = new Thread(() -> {
@@ -68,8 +68,8 @@ final class LocalWidgetServer {
         }, "LegacyTVHub-HTTP");
         worker.setDaemon(true);
         worker.start();
-        listener.changed("Servidor iniciado em http://" + hostIp + "/widgetlist.xml"
-            + "\nNo Smart Hub, configure o IP " + hostIp + " e sincronize. Confirme na própria TV.");
+        listener.changed("Servidor de diagnóstico disponível em http://" + hostIp + ":8080/widgetlist.xml"
+            + "\nATENÇÃO: A sincronização Orsay usa normalmente a porta 80, não 8080. Este servidor comprova apenas a comunicação local; não é uma instalação na TV.");
     }
 
     synchronized void stop() {
