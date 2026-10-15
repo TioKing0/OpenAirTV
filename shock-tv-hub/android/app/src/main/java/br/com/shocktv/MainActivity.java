@@ -34,6 +34,11 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.io.IOException;
+import java.net.URI;
+import java.util.Locale;
+import java.util.Collections;
+import java.util.Comparator;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -59,6 +64,18 @@ public final class MainActivity extends Activity {
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ArrayList<String> sources=new ArrayList<>();
     private final Set<String> disabledBundled=new HashSet<>();
+    private final LinkedHashMap<String,JSONObject> manifestCache =
+        new LinkedHashMap<String,JSONObject>(25,.75f,true){
+            @Override protected boolean removeEldestEntry(java.util.Map.Entry<String,JSONObject> eldest){
+                return size()>40;
+            }
+        };
+    private final LinkedHashMap<String,JSONArray> episodeCache =
+        new LinkedHashMap<String,JSONArray>(10,.75f,true){
+            @Override protected boolean removeEldestEntry(java.util.Map.Entry<String,JSONArray> eldest){
+                return size()>25;
+            }
+        };
     private LinearLayout content;
     private TextView subtitle;
     private UserLibrary library;
@@ -119,6 +136,8 @@ public final class MainActivity extends Activity {
     }
     private void reloadCatalogs(){
         knownItems.clear();
+        synchronized(manifestCache){manifestCache.clear();}
+        synchronized(episodeCache){episodeCache.clear();}
         render();
         for(String source:new ArrayList<>(sources))loadSource(source);
     }
@@ -380,10 +399,19 @@ public final class MainActivity extends Activity {
               "Algumas fontes oferecem só metadados, outras oferecem torrents. O Media3 não reproduz torrents diretamente."))
           .setNegativeButton("Fechar",null).show();
     }
+    private JSONObject getManifest(String url) throws Exception{
+        synchronized(manifestCache){
+            JSONObject found=manifestCache.get(url);
+            if(found!=null)return found;
+        }
+        JSONObject loaded=getJson(url);
+        synchronized(manifestCache){manifestCache.put(url,loaded);}
+        return loaded;
+    }
     private void loadSource(String manifestUrl){
         pool.execute(()->{
             try{
-                JSONObject manifest=getJson(manifestUrl);
+                JSONObject manifest=getManifest(manifestUrl);
                 JSONArray catalogs=manifest.optJSONArray("catalogs");
                 if(catalogs==null)return;
                 String base=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
@@ -828,39 +856,124 @@ public final class MainActivity extends Activity {
           }).show();
     }
 
+    /** A catalog does not imply a meta resource. Resolve detailed series metadata across eligible addons. */
     private void resolveItem(Media m) {
-        if ("series".equals(m.type) && (m.episodeId==null||m.episodeId.isEmpty())) {
-            subtitle.setText("Consultando episódios de "+m.name+"...");
-            pool.execute(()->{
-                try {
-                    JSONObject meta=getJson(m.source+"meta/"+m.type+"/"+encodePart(m.id)+".json").optJSONObject("meta");
-                    JSONArray videos=meta!=null?meta.optJSONArray("videos"):null;
-                    if(videos==null||videos.length()==0) {
-                        runOnUiThread(()->message("Este catálogo ainda não informou episódios reproduzíveis."));
-                        return;
-                    }
-                    ArrayList<String> labels=new ArrayList<>();
-                    ArrayList<Media> episodes=new ArrayList<>();
-                    for(int i=0;i<videos.length()&&i<250;i++) {
-                        JSONObject episode=videos.optJSONObject(i);if(episode==null)continue;
-                        String id=episode.optString("id","");
-                        if(id.isEmpty())continue;
-                        Media item=new Media();
-                        item.id=m.id;item.type=m.type;item.episodeId=id;
-                        item.name=m.name+" • T"+episode.optInt("season",0)+" E"+episode.optInt("episode",0)
-                          +" "+episode.optString("title","");
-                        item.source=m.source;item.poster=m.poster;item.description=m.description;
-                        episodes.add(item);
-                        labels.add(item.name);
-                    }
-                    runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Episódios de "+m.name)
-                       .setItems(labels.toArray(new String[0]),(dialog,index)->details(episodes.get(index)))
-                       .setNegativeButton("Voltar",null).show());
-                }catch(Exception ex){runOnUiThread(()->message("Não foi possível consultar os episódios: "+ex.getMessage()));}
-            });
-        }else{
+        if(!"series".equals(m.type) || (m.episodeId!=null&&!m.episodeId.isEmpty())){
             resolveStreams(m,(m.episodeId!=null&&!m.episodeId.isEmpty())?m.episodeId:m.id);
+            return;
         }
+        final String cacheKey=m.type+"|"+m.id;
+        JSONArray cached;
+        synchronized(episodeCache){cached=episodeCache.get(cacheKey);}
+        if(cached!=null&&cached.length()>0){
+            showEpisodePicker(m,cached);
+            return;
+        }
+        if(subtitle!=null)subtitle.setText("Consultando os episódios...");
+        pool.execute(()->{
+            ArrayList<String> candidateUrls=new ArrayList<>(sources);
+            // Cinemeta is a dedicated metadata provider for IMDb IDs, regardless of which addon showed the item.
+            // Prefer it to FenixFlix, Torrentio and catalog-only providers.
+            if(m.id.startsWith("tt") && candidateUrls.remove(CINEMETA))candidateUrls.add(0,CINEMETA);
+            int compatible=0,errors=0,withoutEpisodes=0;
+            JSONArray episodes=null;
+            for(String manifestUrl:candidateUrls){
+                try{
+                    JSONObject manifest=getManifest(manifestUrl);
+                    if(!supportsResource(manifest,"meta",m.type,m.id))continue;
+                    compatible++;
+                    String root=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
+                    JSONObject answer=getJson(root+"meta/"+encodePart(m.type)+"/"+encodePart(m.id)+".json");
+                    JSONObject meta=answer.optJSONObject("meta");
+                    if(meta==null){withoutEpisodes++;continue;}
+                    JSONArray videos=meta.optJSONArray("videos");
+                    if(videos==null||videos.length()==0){withoutEpisodes++;continue;}
+                    boolean valid=false;
+                    for(int i=0;i<videos.length();i++){
+                        JSONObject episode=videos.optJSONObject(i);
+                        if(episode!=null&&!episode.optString("id","").isEmpty()){valid=true;break;}
+                    }
+                    if(!valid){withoutEpisodes++;continue;}
+                    episodes=videos;
+                    break;
+                }catch(Exception ex){
+                    errors++;
+                    android.util.Log.w("ShockTV-Addon","Metadata addon unavailable ("+safeHost(manifestUrl)+"): "+ex.getClass().getSimpleName());
+                }
+            }
+            final JSONArray result=episodes;
+            final int countCompatible=compatible,failed=errors,empty=withoutEpisodes;
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed())return;
+                if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
+                if(result!=null){
+                    synchronized(episodeCache){episodeCache.put(cacheKey,result);}
+                    showEpisodePicker(m,result);
+                }else{
+                    String status=countCompatible==0
+                       ?"Nenhum addon ativo informou suporte a metadados desta série."
+                       :"Os "+countCompatible+" addon(s) compatíveis não forneceram uma lista de episódios.";
+                    message(status+"\n\nVerifique as fontes ativas, a conexão e tente novamente. "
+                            +"O título foi encontrado no catálogo, mas os episódios ainda não estão disponíveis."
+                            +"\nRespostas inválidas: "+failed+" • Sem episódios: "+empty);
+                }
+            });
+        });
+    }
+    private String safeHost(String url){
+        try{return new URI(url).getHost();}catch(Exception ex){return "fonte";}
+    }
+    /** TV-friendly season browser; episodes are only taken from actual meta.videos, never invented. */
+    private void showEpisodePicker(Media parent,JSONArray videos){
+        ArrayList<JSONObject> all=new ArrayList<>();
+        for(int i=0;i<videos.length()&&i<1200;i++){
+            JSONObject item=videos.optJSONObject(i);
+            if(item!=null&&!item.optString("id","").isEmpty())all.add(item);
+        }
+        Collections.sort(all,(a,b)->{
+            int bySeason=Integer.compare(a.optInt("season",0),b.optInt("season",0));
+            return bySeason!=0?bySeason:Integer.compare(a.optInt("episode",0),b.optInt("episode",0));
+        });
+        if(all.isEmpty()){message("O addon não enviou episódios válidos.");return;}
+        ScrollView page=new ScrollView(this);
+        page.setBackgroundColor(BG);
+        LinearLayout column=new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(dp(45),dp(25),dp(42),dp(38));
+        page.addView(column);
+        column.addView(button("← Voltar aos detalhes",()->details(parent)));
+        TextView title=text(parent.name,27,Color.WHITE,true);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(18);
+        column.addView(title,p);
+        TextView section=text(all.size()+" episódios disponíveis nos metadados",14,0xff90b3c6,false);
+        column.addView(section);
+        int lastSeason=Integer.MIN_VALUE;
+        for(JSONObject ep:all){
+            int season=ep.optInt("season",0),episode=ep.optInt("episode",0);
+            if(season!=lastSeason){
+                lastSeason=season;
+                TextView head=text(season==0?"ESPECIAIS":"TEMPORADA "+season,19,AQUA,true);
+                LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,-2);hp.topMargin=dp(23);hp.bottomMargin=dp(7);
+                column.addView(head,hp);
+            }
+            String epId=ep.optString("id","");
+            String epTitle=ep.optString("title","Episódio "+episode);
+            Media item=new Media();
+            item.id=parent.id;item.type=parent.type;item.episodeId=epId;
+            item.name=parent.name+" · T"+season+"E"+episode+" · "+epTitle;
+            item.source=parent.source;item.poster=parent.poster;item.description=ep.optString("overview",parent.description);
+            item.genre=parent.genre;
+            Button entry=button("E"+episode+"   "+epTitle,()->{
+                // Episode selection directly queries streams; no stale origin-only metadata request.
+                resolveStreams(item,epId);
+            });
+            entry.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            LinearLayout.LayoutParams epParams=new LinearLayout.LayoutParams(-1,dp(52));epParams.bottomMargin=dp(6);
+            column.addView(entry,epParams);
+        }
+        showingDetails=true;
+        setContentView(page);
+        page.requestFocus();
     }
     private String encodePart(String value) throws Exception {
         return URLEncoder.encode(value,"UTF-8").replace("+","%20");
