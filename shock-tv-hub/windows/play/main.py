@@ -233,9 +233,11 @@ class TelaresPlay:
                 highlightbackground="#284556",cursor="hand2")
             frame.grid(row=i//cols,column=i%cols,padx=7,pady=9,sticky="nw")
             frame.grid_propagate(False)
-            poster=tk.Label(frame,text="TELARES",font=("Segoe UI",11,"bold"),bg=LIFT,fg=CYAN)
-            poster.pack(fill="x",padx=1,pady=1)
-            poster.configure(width=146,height=10)
+            poster_area=tk.Frame(frame,bg=LIFT,width=147,height=176)
+            poster_area.pack(padx=1,pady=1)
+            poster_area.pack_propagate(False)
+            poster=tk.Label(poster_area,text="TELARES",font=("Segoe UI",11,"bold"),bg=LIFT,fg=CYAN)
+            poster.pack(fill="both",expand=True)
             for widget in (frame,poster):
                 widget.bind("<Button-1>",lambda e,x=item:self.show_detail(x))
             self.load_art(item,poster)
@@ -308,7 +310,6 @@ class TelaresPlay:
     def toggle_saved(self,item,field):
         ident=self.token(item)
         value=dict(self.get_entry(item))
-        value.update(catalogue=safe_item(item))
         value.update(safe_item(item))
         value[field]=not value.get(field,False)
         value["updated"]=time.time()

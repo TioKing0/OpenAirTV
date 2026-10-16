@@ -1,0 +1,77 @@
+name: Telares Play Windows x86 x64
+on:
+  push:
+    branches: [telares-release-candidate]
+    paths:
+      - "shock-tv-hub/windows/play/**"
+      - "shock-tv-hub/windows/generate_icon.py"
+      - ".github/workflows/telares-windows-play.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  player:
+    name: Telares Play portable ${{ matrix.arch }}
+    runs-on: windows-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            python_arch: x86
+            vlc_arch: win32
+          - arch: x64
+            python_arch: x64
+            vlc_arch: win64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.python_arch }}
+      - name: Verify source syntax and core logic
+        shell: pwsh
+        run: |
+          python -m compileall -q shock-tv-hub/windows/play
+          python -m unittest discover -s shock-tv-hub/windows/play/tests -v
+      - name: Install executable build requirements
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0 Pillow==11.1.0 python-vlc==3.0.21203
+          python shock-tv-hub/windows/generate_icon.py
+      - name: Download and verify VideoLAN VLC runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference="Stop"
+          $arch="${{ matrix.vlc_arch }}"
+          $prefix="https://download.videolan.org/pub/videolan/vlc/3.0.21/$arch/vlc-3.0.21-$arch.7z"
+          Invoke-WebRequest -Uri "$prefix" -OutFile "vlc-runtime.7z" -MaximumRedirection 8
+          Invoke-WebRequest -Uri "$prefix.sha256" -OutFile "vlc-runtime.sha256" -MaximumRedirection 8
+          $expected=((Get-Content "vlc-runtime.sha256" -Raw) -split "\s+")[0].ToLower()
+          $actual=(Get-FileHash "vlc-runtime.7z" -Algorithm SHA256).Hash.ToLower()
+          if ($expected -ne $actual) { throw "VideoLAN runtime SHA256 mismatch $expected vs $actual" }
+          7z x vlc-runtime.7z "-ovlc-extract" -y | Out-Null
+          $dll=Get-ChildItem -Path vlc-extract -Filter libvlc.dll -Recurse | Select-Object -First 1
+          if (-not $dll) { throw "libvlc.dll was not found" }
+          if (-not (Test-Path (Join-Path $dll.DirectoryName "plugins"))) { throw "VLC plugins folder missing" }
+          Copy-Item -Path $dll.DirectoryName -Destination shock-tv-hub/windows/play/vlc -Recurse
+          Write-Host "VLC verified and copied:" $dll.DirectoryName
+      - name: Build standalone Telares Play
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name TelaresPlay --icon shock-tv-hub/windows/TelaresInstall.ico --paths shock-tv-hub/windows/play --hidden-import vlc --add-data "shock-tv-hub/windows/play/vlc;vlc" shock-tv-hub/windows/play/main.py
+          if (!(Test-Path dist/TelaresPlay/TelaresPlay.exe)) { throw "Missing TelaresPlay.exe" }
+          if (!(Test-Path dist/TelaresPlay/vlc/libvlc.dll)) { throw "Missing VLC runtime" }
+          if (!(Test-Path dist/TelaresPlay/vlc/plugins)) { throw "Missing VLC codecs" }
+          Copy-Item shock-tv-hub/windows/play/README.md dist/TelaresPlay/LEIA-ME.txt
+          Compress-Archive -Path dist/TelaresPlay/* -DestinationPath "dist/Telares-Play-Windows-${{ matrix.arch }}-PORTABLE.zip" -CompressionLevel Optimal
+          if (!(Test-Path "dist/Telares-Play-Windows-${{ matrix.arch }}-PORTABLE.zip")) { throw "ZIP missing" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Telares-Play-Windows-${{ matrix.arch }}-Portable
+          path: dist/Telares-Play-Windows-${{ matrix.arch }}-PORTABLE.zip
+          if-no-files-found: error
+          retention-days: 30
