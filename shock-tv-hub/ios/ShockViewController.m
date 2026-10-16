@@ -1,5 +1,10 @@
 #import "ShockViewController.h"
 #import "ShockDetailViewController.h"
+#import "ShockStreamChecker.h"
+#import <ImageIO/ImageIO.h>
+#import <math.h>
+
+static void *kShockPlayerItemStatusContext = &kShockPlayerItemStatusContext;
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <CoreMedia/CoreMedia.h>
@@ -94,6 +99,18 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 @property(nonatomic,strong) NSMutableDictionary *activePlayback;
 @property(nonatomic,assign) NSInteger taskGeneration;
 @property(nonatomic,assign) NSInteger pending;
+@property(nonatomic,strong) ShockStreamChecker *streamChecker;
+@property(nonatomic,strong) NSArray *workingStreams;
+@property(nonatomic,strong) NSDictionary *selectedMedia;
+@property(nonatomic,strong) AVPlayerItem *observedPlayerItem;
+@property(nonatomic,strong) UIButton *playerSourceButton;
+@property(nonatomic,assign) NSInteger playingSourceIndex;
+@property(nonatomic,assign) NSUInteger streamRequestGeneration;
+@property(nonatomic,assign) BOOL hasPlayerObservation;
+@property(nonatomic,assign) BOOL playbackStarted;
+@property(nonatomic,assign) BOOL closingPlayer;
+@property(nonatomic,assign) double seekAfterReady;
+@property(nonatomic,assign) double lastPlaybackPosition;
 @end
 
 @implementation ShockViewController
@@ -144,7 +161,8 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                                       target:self action:@selector(showSources)];
 
     self.imageCache=[[NSCache alloc]init];
-    self.imageCache.countLimit=70;
+    self.imageCache.countLimit=38;
+    self.imageCache.totalCostLimit=7*1024*1024;
     self.pendingImages=[NSMutableSet set];
 
     self.navigationStrip=[[UIView alloc]initWithFrame:CGRectZero];
@@ -342,33 +360,45 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     __weak ShockViewController *weakSelf=self;
     [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:url]
         completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
-            if(error||data.length<100||data.length>1500000){
-                dispatch_async(dispatch_get_main_queue(),^{
-                    [weakSelf.pendingImages removeObject:url];});return;
+            UIImage *thumbnail=nil;
+            if(!error&&data.length>=100&&data.length<1200000){
+                // ImageIO creates a thumbnail without decoding the full-resolution JPEG.
+                CGImageSourceRef source=CGImageSourceCreateWithData((__bridge CFDataRef)data,NULL);
+                if(source){
+                    NSDictionary *options=@{
+                        (id)kCGImageSourceCreateThumbnailFromImageAlways:@YES,
+                        (id)kCGImageSourceCreateThumbnailWithTransform:@YES,
+                        (id)kCGImageSourceShouldCache:@NO,
+                        (id)kCGImageSourceThumbnailMaxPixelSize:@320
+                    };
+                    CGImageRef reduced=CGImageSourceCreateThumbnailAtIndex(source,0,
+                        (__bridge CFDictionaryRef)options);
+                    if(reduced){
+                        thumbnail=[UIImage imageWithCGImage:reduced];
+                        CGImageRelease(reduced);
+                    }
+                    CFRelease(source);
+                }
             }
-            UIImage *raw=[UIImage imageWithData:data];
-            if(!raw){dispatch_async(dispatch_get_main_queue(),^{
-                [weakSelf.pendingImages removeObject:url];});return;}
-            // Reduce poster memory pressure: cache ~180x270 point textures, not originals.
-            CGSize target=CGSizeMake(190,270);
-            UIGraphicsBeginImageContextWithOptions(target,YES,1);
-            [raw drawInRect:CGRectMake(0,0,target.width,target.height)];
-            UIImage *resized=UIGraphicsGetImageFromCurrentImageContext();
-            UIGraphicsEndImageContext();
             dispatch_async(dispatch_get_main_queue(),^{
                 ShockViewController *strong=weakSelf;
                 if(!strong)return;
                 [strong.pendingImages removeObject:url];
-                if(!resized)return;
-                [strong.imageCache setObject:resized forKey:url];
-                // Reused cells must verify the URL before displaying async artwork.
+                if(!thumbnail)return;
+                NSUInteger cost=(NSUInteger)(thumbnail.size.width*thumbnail.size.height*4.0);
+                [strong.imageCache setObject:thumbnail forKey:url cost:cost];
                 if([strong.heroArt isEqual:view]&&
                     [[strong str:strong.featuredItem[@"poster"]] isEqualToString:url])
-                    strong.heroArt.image=resized;
+                    strong.heroArt.image=thumbnail;
                 for(ShockPosterCell *cell in [strong.posterGrid visibleCells])
-                    if([cell.imageURL isEqualToString:url])cell.art.image=resized;
+                    if([cell.imageURL isEqualToString:url])cell.art.image=thumbnail;
             });
         }] resume];
+}
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    [self.imageCache removeAllObjects];
+    [self.posterCache removeAllObjects];
 }
 - (NSString *)keyFor:(NSDictionary *)item {
     NSString *type = [self str:item[@"type"]];
@@ -832,6 +862,11 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     NSString *ident=[self str:item[@"_episode"]];
     if(!ident.length)ident=[self str:item[@"id"]];
     self.status.text=@"Consultando streams dos addons...";
+    self.streamRequestGeneration++;
+    [self.streamChecker cancel];
+    self.streamChecker=nil;
+    self.workingStreams=nil;
+    self.selectedMedia=item;
     NSMutableArray *collected=[NSMutableArray array];
     [self checkStreamSources:[self.sources copy] index:0 item:item
                  type:type identifier:ident found:collected];
@@ -840,18 +875,10 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                       type:(NSString *)type identifier:(NSString *)ident found:(NSMutableArray *)found {
     if(index>=all.count){
         if(!found.count){
-            [self notice:@"Nenhuma mídia HTTP/HLS compatível foi retornada. Torrents não são reproduzidos pelo AVPlayer deste iPad."];
+            [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Opções BitTorrent não são reproduzidas diretamente no iPad."];
             return;
         }
-        [self.results removeAllObjects];
-        [self.results addObjectsFromArray:found];
-        self.mode=@"streams";
-        self.title=@"Opções de reprodução";
-            [self.view setNeedsLayout];
-        self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:@"Voltar"
-            style:UIBarButtonItemStylePlain target:self action:@selector(exitSpecialList)];
-        self.status.text=[NSString stringWithFormat:@"%lu fonte(s) HTTP(S)",(unsigned long)found.count];
-        [self.table reloadData];
+        [self chooseAutomaticallyFrom:found item:item];
         return;
     }
     NSString *source=[self str:all[index]];
@@ -879,7 +906,9 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                     [self str:manifest[@"name"]],[self str:stream[@"name"]]];
                 NSString *description=[self str:stream[@"title"]];
                 data[@"_label"]=[label stringByAppendingFormat:@" %@",description];
-                // AVPlayer handles MP4 and compatible HLS. Source-protected headers and BitTorrent are not supported.
+                // The legacy AVPlayer cannot inject private addon headers.
+                NSDictionary *headers=[self dict:[self dict:[self dict:stream[@"behaviorHints"]][@"proxyHeaders"]][@"request"]];
+                if(headers.count)continue;
                 [found addObject:data];
                 if(found.count>=28)break;
             }
@@ -896,40 +925,193 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     if(self.currentTerm.length>=2)[self beginSearch];
     else [self loadCatalogs];
 }
-- (void)playStream:(NSDictionary *)item {
-    NSString *urlString=[self str:item[@"_url"]];
-    NSURL *url=[NSURL URLWithString:urlString];
-    if(!url||!url.host){[self notice:@"Endereço de reprodução inválido."];return;}
-    NSString *ext=url.pathExtension.lowercaseString;
-    if(![@[@"m3u8",@"mp4",@"m4v",@"mov",@"mp3",@"aac"] containsObject:ext]&&
-       ![urlString containsString:@"m3u8"]){
-        // Some CDN endpoints omit extensions. AVPlayer may still recognize valid HLS by Content-Type.
-        self.status.text=@"Testando compatibilidade de mídia...";
-    }
-    self.activePlayback=[item mutableCopy];
-    self.moviePlayer=[AVPlayer playerWithURL:url];
-    self.playerController=[[AVPlayerViewController alloc] init];
-    self.playerController.player=self.moviePlayer;
-    NSString *entryKey=[self keyFor:item];
-    for(NSDictionary *entry in [self savedEntries])
-        if([[self keyFor:entry] isEqualToString:entryKey]&&[entry[@"position"] doubleValue]>5){
-            CMTime resume=CMTimeMakeWithSeconds([entry[@"position"] doubleValue],600);
-            [self.moviePlayer seekToTime:resume];
-            break;
-        }
+- (void)chooseAutomaticallyFrom:(NSArray *)candidates item:(NSDictionary *)item {
+    NSUInteger generation=self.streamRequestGeneration;
+    self.status.text=[NSString stringWithFormat:@"Verificando até %lu fontes...",
+        (unsigned long)MIN(candidates.count,16)];
+    ShockStreamChecker *checker=[[ShockStreamChecker alloc]init];
+    self.streamChecker=checker;
     __weak ShockViewController *weakSelf=self;
-    [self presentViewController:self.playerController animated:YES completion:^{
-        [weakSelf.moviePlayer play];
+    [checker verify:candidates completion:^(NSArray *available,NSUInteger checked) {
+        ShockViewController *strong=weakSelf;
+        if(!strong||generation!=strong.streamRequestGeneration)return;
+        strong.streamChecker=nil;
+        if(!available.count){
+            strong.status.text=@"Nenhuma fonte compatível respondeu corretamente.";
+            [strong notice:[NSString stringWithFormat:
+                @"As %lu fontes verificadas não ofereceram mídia HTTP/HLS válida. Tente outro título ou addon.",
+                (unsigned long)checked]];
+            return;
+        }
+        strong.workingStreams=available;
+        strong.selectedMedia=item;
+        strong.playingSourceIndex=0;
+        strong.lastPlaybackPosition=0;
+        strong.closingPlayer=NO;
+        strong.status.text=[NSString stringWithFormat:@"%lu fonte(s) preliminarmente disponíveis",
+            (unsigned long)available.count];
+        [strong playStream:available[0]];
     }];
+}
+- (void)cleanCurrentPlayer {
     [self removeTimeMonitor];
-    self.timeObserver=[self.moviePlayer addPeriodicTimeObserverForInterval:CMTimeMake(10,1)
-        queue:dispatch_get_main_queue() usingBlock:^(CMTime time){
+    if(self.hasPlayerObservation&&self.observedPlayerItem){
+        @try {[self.observedPlayerItem removeObserver:self forKeyPath:@"status"
+            context:kShockPlayerItemStatusContext];}
+        @catch(NSException *ignored){}
+        self.hasPlayerObservation=NO;
+    }
+    self.observedPlayerItem=nil;
+    [self.moviePlayer pause];
+    if(self.playerController)self.playerController.player=nil;
+    self.moviePlayer=nil;
+    self.playbackStarted=NO;
+}
+- (void)playStream:(NSDictionary *)item {
+    NSURL *url=[NSURL URLWithString:[self str:item[@"_url"]]];
+    if(!url.host)return;
+    [self cleanCurrentPlayer];
+    self.activePlayback=[item mutableCopy];
+    self.playbackStarted=NO;
+    self.seekAfterReady=self.lastPlaybackPosition;
+    if(self.seekAfterReady<=0){
+        NSString *entryKey=[self keyFor:item];
+        for(NSDictionary *entry in [self savedEntries]){
+            if([[self keyFor:entry] isEqualToString:entryKey]&&[entry[@"position"] doubleValue]>5){
+                self.seekAfterReady=[entry[@"position"] doubleValue];break;
+            }
+        }
+    }
+    AVPlayerItem *playerItem=[AVPlayerItem playerItemWithURL:url];
+    self.observedPlayerItem=playerItem;
+    [playerItem addObserver:self forKeyPath:@"status" options:NSKeyValueObservingOptionNew
+        context:kShockPlayerItemStatusContext];
+    self.hasPlayerObservation=YES;
+    self.moviePlayer=[AVPlayer playerWithPlayerItem:playerItem];
+    if(!self.playerController){
+        self.playerController=[[AVPlayerViewController alloc]init];
+        self.playerController.showsPlaybackControls=YES;
+        [self installSourceControl];
+        __weak ShockViewController *weakSelf=self;
+        [self presentViewController:self.playerController animated:YES completion:^{
             ShockViewController *strong=weakSelf;
-            if(!strong)return;
-            Float64 current=CMTimeGetSeconds(time);
-            if(!isfinite(current)||current<1)return;
-            [strong recordProgress:current];
+            if(strong&&strong.moviePlayer)[strong.moviePlayer play];
         }];
+    }
+    self.playerController.player=self.moviePlayer;
+    [self.moviePlayer play];
+}
+- (void)installSourceControl {
+    // Use a small optional button; native AVPlayer controls remain available for touch.
+    UIButton *button=[UIButton buttonWithType:UIButtonTypeCustom];
+    [button setTitle:@"Fontes" forState:UIControlStateNormal];
+    button.frame=CGRectMake(0,32,95,43);
+    button.autoresizingMask=UIViewAutoresizingFlexibleLeftMargin;
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    button.backgroundColor=[UIColor colorWithRed:.06 green:.26 blue:.34 alpha:.85];
+    button.layer.cornerRadius=10;
+    button.titleLabel.font=[UIFont boldSystemFontOfSize:15];
+    [button addTarget:self action:@selector(showVerifiedSources) forControlEvents:UIControlEventTouchUpInside];
+    CGRect b=self.playerController.view.bounds;
+    button.frame=CGRectMake(MAX(10,b.size.width-114),22,95,43);
+    [self.playerController.view addSubview:button];
+    self.playerSourceButton=button;
+    self.playerSourceButton.hidden=self.workingStreams.count<=1;
+}
+- (void)showVerifiedSources {
+    if(self.workingStreams.count<2||self.closingPlayer)return;
+    UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Fontes verificadas"
+        message:@"Estas fontes responderam ao teste de rede; a reprodução completa ainda depende do servidor."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    for(NSUInteger i=0;i<self.workingStreams.count;i++){
+        NSDictionary *entry=self.workingStreams[i];
+        NSString *caption=[self str:entry[@"_label"]];
+        if(caption.length>78)caption=[[caption substringToIndex:78]stringByAppendingString:@"…"];
+        NSUInteger choice=i;
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%@ %@",
+            (i==(NSUInteger)self.playingSourceIndex?@"✓":@"○"),caption]
+            style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+                if(choice!=(NSUInteger)self.playingSourceIndex){
+                    [self saveCurrentPosition];
+                    self.playingSourceIndex=(NSInteger)choice;
+                    [self playStream:self.workingStreams[choice]];
+                }
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancelar"
+        style:UIAlertActionStyleCancel handler:nil]];
+    // Action sheets on iPad must specify an anchor or UIKit throws an exception.
+    UIPopoverPresentationController *popover=sheet.popoverPresentationController;
+    if(popover)popover.sourceView=self.playerSourceButton;
+    if(popover)popover.sourceRect=self.playerSourceButton.bounds;
+    [self.playerController presentViewController:sheet animated:YES completion:nil];
+}
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object
+    change:(NSDictionary *)change context:(void *)context {
+    if(context!=kShockPlayerItemStatusContext){
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+    if(object!=self.observedPlayerItem||self.closingPlayer)return;
+    AVPlayerItem *item=self.observedPlayerItem;
+    if(item.status==AVPlayerItemStatusReadyToPlay){
+        if(self.seekAfterReady>5){
+            CMTime position=CMTimeMakeWithSeconds(self.seekAfterReady,600);
+            self.seekAfterReady=0;
+            [self.moviePlayer seekToTime:position];
+        }
+        if(!self.timeObserver){
+            __weak ShockViewController *weakSelf=self;
+            self.timeObserver=[self.moviePlayer addPeriodicTimeObserverForInterval:CMTimeMake(10,1)
+                queue:dispatch_get_main_queue() usingBlock:^(CMTime time) {
+                    ShockViewController *strong=weakSelf;
+                    if(!strong||strong.closingPlayer||!strong.moviePlayer)return;
+                    Float64 seconds=CMTimeGetSeconds(time);
+                    if(isfinite(seconds)&&seconds>1){
+                        strong.playbackStarted=YES;
+                        [strong recordProgress:seconds];
+                    }
+                }];
+        }
+    }else if(item.status==AVPlayerItemStatusFailed){
+        [self tryNextPlaybackSource];
+    }
+}
+- (void)tryNextPlaybackSource {
+    if(self.closingPlayer)return;
+    [self saveCurrentPosition];
+    NSInteger next=self.playingSourceIndex+1;
+    if(next<(NSInteger)self.workingStreams.count && next<16){
+        self.playingSourceIndex=next;
+        self.status.text=[NSString stringWithFormat:@"Fonte instável. Tentando alternativa %ld...",
+            (long)(next+1)];
+        [self playStream:self.workingStreams[(NSUInteger)next]];
+        return;
+    }
+    [self closePlayerWithError:@"As fontes verificadas falharam durante a reprodução. O AVPlayer do iOS 9 pode não suportar este formato."];
+}
+- (void)saveCurrentPosition {
+    if(!self.playbackStarted||!self.moviePlayer||!self.activePlayback)return;
+    Float64 current=CMTimeGetSeconds(self.moviePlayer.currentTime);
+    if(isfinite(current)&&current>0){
+        self.lastPlaybackPosition=current;
+        [self recordProgress:current];
+    }
+}
+- (void)closePlayerWithError:(NSString *)error {
+    if(self.closingPlayer)return;
+    self.closingPlayer=YES;
+    [self cleanCurrentPlayer];
+    __weak ShockViewController *weakSelf=self;
+    [self.playerController dismissViewControllerAnimated:YES completion:^{
+        ShockViewController *strong=weakSelf;
+        strong.playerController=nil;
+        strong.playerSourceButton=nil;
+        strong.activePlayback=nil;
+        strong.workingStreams=nil;
+        strong.closingPlayer=NO;
+        if(error.length)[strong notice:error];
+    }];
 }
 - (void)recordProgress:(double)seconds {
     if(!self.activePlayback)return;
@@ -955,21 +1137,32 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [[NSUserDefaults standardUserDefaults] setObject:all forKey:@"shock_items_v1"];
 }
 - (void)removeTimeMonitor {
-    if(self.timeObserver && self.moviePlayer){
+    if(self.timeObserver&&self.moviePlayer){
         [self.moviePlayer removeTimeObserver:self.timeObserver];
-        self.timeObserver=nil;
+    }
+    self.timeObserver=nil;
+}
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    // User left native AVPlayer controller with Done/Back: release all media resources.
+    if(self.playerController&&!self.presentedViewController&&!self.closingPlayer){
+        [self saveCurrentPosition];
+        [self cleanCurrentPlayer];
+        self.playerController=nil;
+        self.playerSourceButton=nil;
+        self.activePlayback=nil;
+        self.workingStreams=nil;
+        self.selectedMedia=nil;
     }
 }
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    if(self.moviePlayer && self.activePlayback){
-        Float64 position=CMTimeGetSeconds(self.moviePlayer.currentTime);
-        if(isfinite(position)&&position>0)[self recordProgress:position];
-    }
+    [self saveCurrentPosition];
 }
 - (void)dealloc {
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(beginSearch) object:nil];
-    [self removeTimeMonitor];
+    [self.streamChecker cancel];
+    [self cleanCurrentPlayer];
 }
 - (BOOL)prefersStatusBarHidden{return YES;}
 - (BOOL)shouldAutorotate{return YES;}
