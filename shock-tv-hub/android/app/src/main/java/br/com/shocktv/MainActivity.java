@@ -79,6 +79,8 @@ public final class MainActivity extends Activity {
     private java.util.concurrent.Future<?> searchFuture;
     private String chosenCategory="";
     private int categoryGeneration=0;
+    private String liveGroupFilter="Todos os canais";
+    private Media liveSelectedChannel=null;
     private final ArrayList<Media> categoryResults=new ArrayList<>();
     private TextView categoryStatus;
     private final ArrayList<String> sources=new ArrayList<>();
@@ -571,11 +573,7 @@ public final class MainActivity extends Activity {
         if("minha".equals(activeSection))return;
         Set<String> shown=new HashSet<>();
         if("aovivo".equals(activeSection)){
-            addRowFrom("Canais ao vivo",matching(this::isChannel),shown);
-            boolean foundLive=false;
-            for(Media candidate:knownItems)if(isChannel(candidate)){foundLive=true;break;}
-            if(!foundLive)
-                catalogArea.addView(text("Nenhum canal carregado. Verifique IPTV/Tvvio em Fontes.",15,0xffb1c8d5,false));
+            buildLiveChannelGuide();
         }else if("filmes".equals(activeSection)||"series".equals(activeSection)){
             boolean movie="filmes".equals(activeSection);
             MediaFilter type=m->movie?isFilm(m):isSeries(m);
@@ -598,6 +596,104 @@ public final class MainActivity extends Activity {
             empty.setPadding(dp(5),dp(25),dp(5),dp(25));catalogArea.addView(empty);
         }
     }
+    /** TV guide: remote-friendly groups, channel list and program preview. */
+    private String liveGroupOf(Media m){
+        String title=normalizeCategory(m.name),origin=normalizeCategory(m.catalogId+" "+m.genre);
+        if(title.contains("telecine"))return "Telecine";
+        if(title.contains("hbo")||title.contains("cinemax"))return "HBO / Max";
+        if(title.contains("sportv")||title.contains("espn")||title.contains("premiere")||
+           title.contains("tnt sports")||origin.contains("esporte"))return "Esportes";
+        if(title.contains("globo")||title.contains("record")||title.contains("sbt")||
+           title.contains("rede tv")||title.contains("tv cultura")||origin.contains("aberto"))
+            return "Canais abertos";
+        if(title.contains("news")||title.contains("cnn")||origin.contains("noticia"))return "Notícias";
+        if(title.contains("cartoon")||origin.contains("infantil"))return "Infantil";
+        if(origin.contains("religioso"))return "Religiosos";
+        if(origin.contains("entretenimento"))return "Entretenimento";
+        if(origin.contains("filmes")||origin.contains("series"))return "Filmes e séries";
+        return "Outros canais";
+    }
+    private void buildLiveChannelGuide(){
+        ArrayList<Media> channels=matching(this::isChannel);
+        if(channels.isEmpty()){
+            catalogArea.addView(text("Aguardando catálogos de TV. Consulte os addons em Fontes.",17,0xffb1c8d5,false));
+            return;
+        }
+        java.util.Collections.sort(channels,(a,b)->a.name.compareToIgnoreCase(b.name));
+        ArrayList<String> groups=new ArrayList<>();
+        groups.add("Todos os canais");
+        for(Media m:channels){String group=liveGroupOf(m);if(!groups.contains(group))groups.add(group);}
+        if(!groups.contains(liveGroupFilter))liveGroupFilter="Todos os canais";
+        final ArrayList<Media> subset=new ArrayList<>();
+        for(Media m:channels)
+            if("Todos os canais".equals(liveGroupFilter)||liveGroupOf(m).equals(liveGroupFilter))
+                subset.add(m);
+        if(liveSelectedChannel==null||!subset.contains(liveSelectedChannel))
+            liveSelectedChannel=subset.isEmpty()?null:subset.get(0);
+
+        LinearLayout guide=new LinearLayout(this);
+        guide.setOrientation(LinearLayout.HORIZONTAL);
+        guide.setPadding(dp(5),dp(15),dp(5),dp(8));
+        catalogArea.addView(guide,new LinearLayout.LayoutParams(-1,dp(540)));
+
+        LinearLayout groupList=new LinearLayout(this);
+        groupList.setOrientation(LinearLayout.VERTICAL);
+        groupList.setPadding(dp(5),dp(5),dp(8),dp(12));
+        groupList.addView(text("CATEGORIAS",16,AQUA,true));
+        for(String group:groups){
+            Button tab=button((group.equals(liveGroupFilter)?"● ":"○ ")+group,()->{
+                liveGroupFilter=group;
+                liveSelectedChannel=null;
+                refreshCatalogRows();
+            });
+            groupList.addView(tab,new LinearLayout.LayoutParams(-1,dp(53)));
+        }
+        ScrollView groupsScroll=new ScrollView(this);
+        groupsScroll.setFillViewport(true);
+        groupsScroll.addView(groupList);
+        guide.addView(groupsScroll,new LinearLayout.LayoutParams(dp(213),-1));
+
+        LinearLayout channelList=new LinearLayout(this);
+        channelList.setOrientation(LinearLayout.VERTICAL);
+        channelList.setPadding(dp(8),dp(5),dp(10),dp(12));
+        channelList.addView(text("CANAIS • "+subset.size(),16,AQUA,true));
+        for(Media m:subset){
+            Button channel=button((m==liveSelectedChannel?"▶ ":"  ")+m.name,()->{
+                liveSelectedChannel=m;
+                refreshCatalogRows();
+            });
+            channel.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            channelList.addView(channel,new LinearLayout.LayoutParams(-1,dp(58)));
+        }
+        ScrollView channelsScroll=new ScrollView(this);
+        channelsScroll.setFillViewport(true);
+        channelsScroll.addView(channelList);
+        guide.addView(channelsScroll,new LinearLayout.LayoutParams(dp(282),-1));
+
+        LinearLayout preview=new LinearLayout(this);
+        preview.setOrientation(LinearLayout.VERTICAL);
+        preview.setPadding(dp(22),dp(6),dp(12),dp(15));
+        preview.setBackground(shape(0xff14283a,0xff214b61));
+        guide.addView(preview,new LinearLayout.LayoutParams(0,-1,1f));
+        Media selected=liveSelectedChannel;
+        if(selected!=null){
+            preview.addView(text("AO VIVO  •  "+liveGroupOf(selected),14,AQUA,true));
+            TextView title=text(selected.name,25,Color.WHITE,true);
+            title.setMaxLines(2);preview.addView(title);
+            ImageView poster=new ImageView(this);
+            poster.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            poster.setBackgroundColor(0xff091420);
+            LinearLayout.LayoutParams img=new LinearLayout.LayoutParams(-1,0,1f);
+            img.topMargin=dp(12);img.bottomMargin=dp(15);
+            preview.addView(poster,img);
+            if(selected.poster.startsWith("https://"))loadPoster(selected.poster,poster);
+            preview.addView(text("Escolha Reproduzir para abrir o sinal em tela cheia. A disponibilidade depende do addon.",13,0xffa9c9d7,false));
+            Button play=button("▶  Reproduzir canal",()->details(selected));
+            LinearLayout.LayoutParams start=new LinearLayout.LayoutParams(-1,dp(50));
+            start.topMargin=dp(14);preview.addView(play,start);
+        }
+    }
+
     private void addCatalog(String header,ArrayList<Media> media){
         LinearLayout block=new LinearLayout(this);
         block.setOrientation(LinearLayout.VERTICAL);
