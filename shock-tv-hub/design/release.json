@@ -1,0 +1,69 @@
+{
+  "brand": "TELARES",
+  "batch": "telares-categories-rc2",
+  "date": "2026-10-16",
+  "feature": "Categorias Anime, Netflix, Max/HBO e Disney+; dados declarados pelos addons Stremio, sem afirmar direitos de streaming",
+  "streamingTargets": [
+    {
+      "platform": "android-tv",
+      "name": "Telares TV",
+      "version": "1.0.0-rc2",
+      "applicationId": "br.com.shocktv"
+    },
+    {
+      "platform": "ios-ipad-legacy",
+      "name": "Telares Play",
+      "version": "0.3.1",
+      "applicationId": "br.com.shocktv.legacy",
+      "armv7": true
+    },
+    {
+      "platform": "windows-play-x86",
+      "name": "Telares Play",
+      "version": "0.2.0"
+    },
+    {
+      "platform": "windows-play-x64",
+      "name": "Telares Play",
+      "version": "0.2.0"
+    }
+  ],
+  "utilities": [
+    {
+      "platform": "windows-install-x86",
+      "name": "Telares Install",
+      "role": "Samsung Orsay local sync",
+      "featureApplicable": false
+    },
+    {
+      "platform": "windows-install-x64",
+      "name": "Telares Install",
+      "role": "Samsung Orsay local sync",
+      "featureApplicable": false
+    },
+    {
+      "platform": "android-helper",
+      "name": "Telares Install Android",
+      "role": "local Wi-Fi diagnostics",
+      "featureApplicable": false
+    },
+    {
+      "platform": "samsung-orsay-widget",
+      "name": "Telares TV Legacy",
+      "role": "diagnostic prototype only",
+      "featureApplicable": false
+    }
+  ],
+  "notYetImplemented": [
+    "Android mobile touch player",
+    "iOS phone layout",
+    "Windows streaming installer with stable signature",
+    "Universal Smart TV installer"
+  ],
+  "rules": [
+    "Every feature release triggers AndroidTV, iOS, Windows Play, Windows Install helper packaging",
+    "Deliver only verified CI artifacts, include signed/test warnings",
+    "Genre/catalog classification from addons is not certified subscription availability",
+    "Real provider discovery by region requires a licensed source and attribution"
+  ]
+}

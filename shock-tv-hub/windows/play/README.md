@@ -1,3 +1,7 @@
 # Telares Play Windows
 
 Aplicativo de streaming separado do Telares Install. Catálogos, busca, episódios e fontes diretas de addons Stremio; reprodução VLC para mídia HTTP/HLS compatível; favoritos, histórico e retomada persistidos em AppData. Builds x86 e x64 usam libVLC 3.0.21 empacotado. Extraia o ZIP inteiro antes de abrir TelaresPlay.exe. Fontes BitTorrent com infoHash, DRM e requisições com cabeçalhos privados não são suportadas. Requer validação funcional em Windows real. A redistribuição de VLC está sujeita às licenças VideoLAN aplicáveis e aos avisos correspondentes.
+
+## Novas categorias V0.2.0 (candidata)
+
+Categorias Anime, Netflix, Max/HBO e Disney+ via metadados declarados dos addons. Gêneros Anime e catálogos Anime que anunciam gênero são consultados remotamente; títulos de plataforma só aparecem quando o addon identifica catálogo/provedor correspondente. Isso é classificação pelo addon, **não** confirmação da assinatura ou disponibilidade oficial no país. Catálogos inexistentes exibem vazio. A identificação oficial de provedores por país requer integrar uma fonte de disponibilidade autorizada, como TMDb (watch_region=BR e com atribuição JustWatch) com chave configurada.
