@@ -1,4 +1,4 @@
-# Shock TV — Contrato visual e de experiência, multiplataforma
+# Telares — Contrato visual e de experiência, multiplataforma
 
 **Uma marca, quatro métodos de entrada.** Manter a mesma hierarquia de conteúdo,
 vocabulário, capa, ícones, estados do player e paleta em todos os clientes.
@@ -6,7 +6,7 @@ Adaptar somente a entrada (controle remoto, toque, mouse/teclado) e o espaço di
 
 ## Identidade canônica
 
-- Produto: **SHOCK TV**; marca visual SHOCK (branco) / TV (ciano).
+- Produto: **TELARES**; marca visual TELARES (branco e ciano).
 - Fundo principal: `#091420`. Superfície: `#14283A`. Superfície elevada `#1B3447`.
 - Destaque / foco ativo: `#68D8E9`. Texto principal: `#F3FAFF`.
 - Tipografia: sem serifa do sistema; escala proporcional à distância visual.

@@ -1,8 +1,8 @@
-name: Shock TV Source ZIP and iOS 9 IPA
+name: Telares Play iOS9 IPA and Source
 on:
   workflow_dispatch:
   push:
-    branches: [shock-tv-ios-v0.2]
+    branches: [telares-release-candidate]
     paths:
       - "shock-tv-hub/ios/**"
       - ".github/workflows/shock-tv-legacy-ios.yml"
@@ -19,16 +19,17 @@ jobs:
       - name: Pack complete Shock TV project
         run: |
           mkdir -p dist
-          git archive --format=zip --prefix=Shock-TV-Hub/ \
-            -o dist/Shock-TV-iPad-v0.2.1-SOURCE.zip HEAD:shock-tv-hub
-          unzip -t dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | tail -n 2
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
+          git archive --format=zip --prefix=Telares-Source/ \
+            -o dist/Telares-RC-Complete-Source.zip HEAD
+          unzip -t dist/Telares-RC-Complete-Source.zip | tail -n 2
+          unzip -Z1 dist/Telares-RC-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/android/app/build.gradle'
+          unzip -Z1 dist/Telares-RC-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/ios/Makefile'
+          unzip -Z1 dist/Telares-RC-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/windows/main.py'
+          unzip -Z1 dist/Telares-RC-Complete-Source.zip | grep -q 'Telares-Source/legacy-tv-hub/widget/config.xml'
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-iPad-v0.2.1-Complete-Source-ZIP
-          path: dist/Shock-TV-iPad-v0.2.1-SOURCE.zip
+          name: Telares-ReleaseCandidate-Complete-Source-ZIP
+          path: dist/Telares-RC-Complete-Source.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -67,15 +68,15 @@ jobs:
           tar -xjf /tmp/iPhoneOS9.2.sdk.tbz2 -C "$THEOS/sdks"
           test -d "$THEOS/sdks/iPhoneOS9.2.sdk"
 
-      - name: Create Shock TV iPad home screen icons
+      - name: Create Telares Play iPad home screen icons
         run: |
           set -euxo pipefail
           DIR=shock-tv-hub/ios/Resources
-          convert -size 152x152 xc:'#071828' \
-             -fill '#40c5d8' -draw 'roundrectangle 10,10 141,141 25,25' \
-             -fill '#071828' -draw 'polygon 53,36 53,115 113,76' \
-             -font DejaVu-Sans-Bold -pointsize 19 -fill white \
-             -gravity south -annotate +0+11 SHOCK \
+          convert -size 152x152 xc:'#091420' \
+             -fill '#68d8e9' -draw 'roundrectangle 10,10 141,141 25,25' \
+             -fill '#091420' -draw 'polygon 53,36 53,115 113,76' \
+             -font DejaVu-Sans-Bold -pointsize 17 -fill white \
+             -gravity south -annotate +0+11 TELARES \
              "$DIR/Icon-76.png"
           convert "$DIR/Icon-76.png" -resize 29x29! "$DIR/AppIcon29x29~ipad.png"
           convert "$DIR/Icon-76.png" -resize 58x58! "$DIR/AppIcon29x29@2x~ipad.png"
@@ -108,12 +109,12 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa Payload)
-          unzip -t dist/ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry Telares-Play-iOS9-v0.3.0-ARMv7.ipa Payload)
+          unzip -t dist/Telares-Play-iOS9-v0.3.0-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-iOS9-v0.2.1-ARMv7-IPA
-          path: dist/ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa
+          name: Telares-Play-iOS9-v0.3.0-ARMv7-IPA
+          path: dist/Telares-Play-iOS9-v0.3.0-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30
