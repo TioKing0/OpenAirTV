@@ -119,12 +119,12 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry Telares-Play-iOS9-v0.3.1-ARMv7.ipa Payload)
-          unzip -t dist/Telares-Play-iOS9-v0.3.1-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry Telares-Play-iOS9-v0.3.2-ARMv7.ipa Payload)
+          unzip -t dist/Telares-Play-iOS9-v0.3.2-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-iOS9-v0.3.1-ARMv7-IPA
-          path: dist/Telares-Play-iOS9-v0.3.1-ARMv7.ipa
+          name: Telares-Play-iOS9-v0.3.2-ARMv7-IPA
+          path: dist/Telares-Play-iOS9-v0.3.2-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30

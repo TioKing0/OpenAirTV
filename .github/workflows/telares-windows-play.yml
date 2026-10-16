@@ -68,11 +68,11 @@ jobs:
           if (!(Test-Path dist/TelaresPlay/vlc/libvlc.dll)) { throw "Missing VLC runtime" }
           if (!(Test-Path dist/TelaresPlay/vlc/plugins)) { throw "Missing VLC codecs" }
           Copy-Item shock-tv-hub/windows/play/README.md dist/TelaresPlay/LEIA-ME.txt
-          Compress-Archive -Path dist/TelaresPlay/* -DestinationPath "dist/Telares-Play-Windows-v0.2.0-${{ matrix.arch }}-PORTABLE.zip" -CompressionLevel Optimal
-          if (!(Test-Path "dist/Telares-Play-Windows-v0.2.0-${{ matrix.arch }}-PORTABLE.zip")) { throw "ZIP missing" }
+          Compress-Archive -Path dist/TelaresPlay/* -DestinationPath "dist/Telares-Play-Windows-v0.2.1-${{ matrix.arch }}-PORTABLE.zip" -CompressionLevel Optimal
+          if (!(Test-Path "dist/Telares-Play-Windows-v0.2.1-${{ matrix.arch }}-PORTABLE.zip")) { throw "ZIP missing" }
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-Windows-v0.2.0-${{ matrix.arch }}-Portable
-          path: dist/Telares-Play-Windows-v0.2.0-${{ matrix.arch }}-PORTABLE.zip
+          name: Telares-Play-Windows-v0.2.1-${{ matrix.arch }}-Portable
+          path: dist/Telares-Play-Windows-v0.2.1-${{ matrix.arch }}-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
