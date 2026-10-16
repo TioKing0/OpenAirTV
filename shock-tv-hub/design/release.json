@@ -1,13 +1,13 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-stability-rc7",
+  "batch": "telares-android-mobile-rc8",
   "date": "2026-10-16",
-  "feature": "Correção do preview nativo de canais ao vivo no iPad e seleção HTTP sem Range, segregação de canais da home/filmes/séries Android TV, continuidade Windows VLC, restauração da categoria Animes.",
+  "feature": "Telares Play Android smartphone/tablet com interface touch responsiva, orientação adaptativa, live guide vertical, preservando TV, iPad e Windows",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc7",
+      "version": "1.0.0-rc8",
       "applicationId": "br.com.shocktv"
     },
     {
@@ -26,6 +26,21 @@
       "platform": "windows-play-x64",
       "name": "Telares Play",
       "version": "0.2.5"
+    },
+    {
+      "platform": "android-mobile",
+      "name": "Telares Play",
+      "version": "0.1.0-rc1",
+      "applicationId": "br.com.telares.play",
+      "minSdk": 23,
+      "architectures": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86",
+        "x86_64"
+      ],
+      "ui": "responsive touch phone/tablet; portrait/landscape",
+      "status": "build and physical QA pending"
     }
   ],
   "utilities": [
@@ -55,7 +70,6 @@
     }
   ],
   "notYetImplemented": [
-    "Android mobile touch player",
     "iOS phone layout",
     "Windows streaming installer with stable signature",
     "Universal Smart TV installer"
@@ -125,7 +139,10 @@
     "Android TV: D-pad guia de categorias, canais, logo do canal e abrir player full screen.",
     "Windows: três colunas e prévia VLC dentro do guia.",
     "Fontes ao vivo não passam obrigatoriamente por teste de intervalo HTTP e tentam fallback.",
-    "Compatibilidade de canais externos depende de fonte, codecs e DRM."
+    "Compatibilidade de canais externos depende de fonte, codecs e DRM.",
+    "Nova variante Android separada por flavors tv/mobile; compartilha Media3, addons, fontes e armazenamento local do mesmo código-base, mas com applicationId móvel independente.",
+    "Mobile layouts: telas compactas até 699dp com bottom navigation, 700dp+ abas superiores; guia ao vivo compacto até 839dp; player permite rotação.",
+    "A variante mobile foi compilada sem teste físico em celulares com notch, barra gestual, telas dobráveis ou modos multijanela; validar em hardware."
   ],
   "testStatus": "GitHub CI build pending; physical decoding unverified"
 }
