@@ -90,6 +90,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 @property(nonatomic,strong) NSMutableDictionary *posterCache;
 @property(nonatomic,strong) NSMutableSet *knownIDs;
 @property(nonatomic,copy) NSString *filter;
+@property(nonatomic,copy) NSString *categoryFilter;
 @property(nonatomic,copy) NSString *mode;
 @property(nonatomic,copy) NSString *currentTerm;
 @property(nonatomic,strong) NSDictionary *activeSeries;
@@ -169,7 +170,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.navigationStrip.backgroundColor=[UIColor colorWithRed:.057 green:.107 blue:.167 alpha:1];
     self.navigationStrip.layer.cornerRadius=12;
     [self.view addSubview:self.navigationStrip];
-    NSArray *tabs=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    NSArray *tabs=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
     for(NSUInteger index=0;index<tabs.count;index++){
         UIButton *button=[UIButton buttonWithType:UIButtonTypeCustom];
         button.tag=100+(NSInteger)index;
@@ -264,7 +265,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.searchToggle.frame=CGRectMake(width-searchW-margin,navTop,searchW,navHeight);
     self.navigationStrip.frame=CGRectMake(margin,navTop,
         width-margin*3-searchW,navHeight);
-    CGFloat tabW=self.navigationStrip.bounds.size.width/4.0;
+    CGFloat tabW=self.navigationStrip.bounds.size.width/5.0;
     for(UIView *control in self.navigationStrip.subviews)
         if([control isKindOfClass:[UIButton class]])
             control.frame=CGRectMake((control.tag-100)*tabW+3,3,tabW-6,navHeight-6);
@@ -293,13 +294,14 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [self.posterGrid.collectionViewLayout invalidateLayout];
 }
 - (void)setSelectedTab {
-    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
     for(UIView *view in self.navigationStrip.subviews){
         if(![view isKindOfClass:[UIButton class]])continue;
         UIButton *button=(UIButton *)view;
         NSInteger index=button.tag-100;
         if(index<0||index>=names.count)continue;
-        BOOL chosen=[self.filter isEqualToString:names[(NSUInteger)index]]&&!self.searching;
+        BOOL chosen=(!self.searching&&([self.filter isEqualToString:names[(NSUInteger)index]]||
+           (index==4&&self.categoryFilter.length>0)));
         button.backgroundColor=chosen?
             [UIColor colorWithRed:.14 green:.39 blue:.49 alpha:1]:[UIColor clearColor];
         [button setTitleColor:chosen?[UIColor whiteColor]:
@@ -307,17 +309,122 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     }
 }
 - (void)tapTab:(UIButton *)button {
-    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
     NSInteger idx=button.tag-100;
     if(idx<0||idx>=names.count)return;
+    if(idx==4){[self showCategoryChooser:button];return;}
     self.searching=NO;
     self.search.hidden=YES;
     [self.search resignFirstResponder];
     self.currentTerm=@"";
     self.search.text=@"";
     self.filter=names[(NSUInteger)idx];
-    [self setSelectedTab];
+    if(self.categoryFilter.length){
+        self.categoryFilter=nil;
+        [self setSelectedTab];
+        [self loadCatalogs];
+    }else{
+        [self setSelectedTab];
+        [self refreshList];
+    }
+}
+- (BOOL)category:(NSString *)tag fromProvider:(NSString *)provider catalog:(NSString *)catalog
+    catalogId:(NSString *)ident genres:(NSArray *)genres {
+    NSString *origin=[NSString stringWithFormat:@"%@ %@ %@",provider?:@"",catalog?:@"",ident?:@""];
+    origin=origin.lowercaseString;
+    if([tag isEqualToString:@"Anime"]){
+        if([origin containsString:@"anime"])return YES;
+        for(id value in genres)if([[self str:value].lowercaseString containsString:@"anime"])return YES;
+        return NO;
+    }
+    if([tag isEqualToString:@"Netflix"])return [origin containsString:@"netflix"];
+    if([tag isEqualToString:@"Max / HBO"])
+        return [origin containsString:@"hbo"]||[origin containsString:@"max catalog"]||
+               [origin containsString:@"max originals"]||[origin containsString:@"hbomax"];
+    if([tag isEqualToString:@"Disney+"])
+        return [origin containsString:@"disney+"]||[origin containsString:@"disney plus"]||
+               [origin containsString:@"disneyplus"];
+    return NO;
+}
+- (NSString *)animeExtra:(NSDictionary *)catalog {
+    for(NSDictionary *extra in [self arr:catalog[@"extra"]]){
+        if(![[self str:extra[@"name"]] isEqualToString:@"genre"])continue;
+        for(NSString *value in [self arr:extra[@"options"]])
+            if([[self str:value].lowercaseString containsString:@"anime"])
+                return [@"/genre=" stringByAppendingString:[self pathEncode:value]];
+    }
+    return @"";
+}
+- (void)showCategoryChooser:(UIButton *)button {
+    UIAlertController *dialog=[UIAlertController alertControllerWithTitle:@"Categorias Telares"
+        message:@"Catálogos declarados pelos addons. Não comprovam disponibilidade oficial ou assinatura de streaming."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    for(NSString *tag in @[@"Anime",@"Netflix",@"Max / HBO",@"Disney+"]){
+        [dialog addAction:[UIAlertAction actionWithTitle:tag
+            style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+                self.searching=NO;
+                self.search.hidden=YES;
+                [self.search resignFirstResponder];
+                self.search.text=@"";
+                self.currentTerm=@"";
+                self.categoryFilter=tag;
+                self.filter=@"Categorias";
+                self.title=@"TELARES";
+                [self setSelectedTab];
+                [self loadCategory:tag];
+            }]];
+    }
+    [dialog addAction:[UIAlertAction actionWithTitle:@"Cancelar"
+        style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover=dialog.popoverPresentationController;
+    if(popover){popover.sourceView=button;popover.sourceRect=button.bounds;}
+    [self presentViewController:dialog animated:YES completion:nil];
+}
+- (void)loadCategory:(NSString *)tag {
+    self.mode=@"catalog";
+    NSInteger generation=++self.taskGeneration;
+    [self.catalogItems removeAllObjects];
     [self refreshList];
+    self.status.text=[NSString stringWithFormat:@"Buscando %@ nos addons...",tag];
+    for(NSString *source in [self.sources copy]){
+        [self manifest:source done:^(NSDictionary *manifest){
+            if(generation!=self.taskGeneration||!manifest)return;
+            NSString *base=[source substringToIndex:source.length-@"manifest.json".length];
+            NSString *provider=[self str:manifest[@"name"]];
+            NSUInteger loaded=0;
+            for(NSDictionary *cat in [self arr:manifest[@"catalogs"]]){
+                if(loaded>=7)break;
+                NSString *kind=[self str:cat[@"type"]],*ident=[self str:cat[@"id"]];
+                if(![kind isEqualToString:@"movie"]&&![kind isEqualToString:@"series"])continue;
+                if(!ident.length||ident.length>100)continue;
+                NSCharacterSet *safe=[NSCharacterSet characterSetWithCharactersInString:
+                    @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-"];
+                if([ident rangeOfCharacterFromSet:[safe invertedSet]].location!=NSNotFound)continue;
+                NSString *catName=[self str:cat[@"name"]];
+                BOOL providerCatalog=[self category:tag fromProvider:provider catalog:catName catalogId:ident genres:@[]];
+                NSString *genre=[tag isEqualToString:@"Anime"]?[self animeExtra:cat]:@"";
+                if(!providerCatalog&&!genre.length&&![tag isEqualToString:@"Anime"])continue;
+                loaded++;
+                NSString *url=[NSString stringWithFormat:@"%@catalog/%@/%@%@.json",
+                    base,[self pathEncode:kind],[self pathEncode:ident],genre];
+                [self requestJSON:url complete:^(NSDictionary *response,NSError *error){
+                    if(generation!=self.taskGeneration||error)return;
+                    NSMutableArray *items=[NSMutableArray array];
+                    for(NSDictionary *raw in [self arr:response[@"metas"]]){
+                        BOOL belongs=providerCatalog||genre.length>0||
+                           [self category:tag fromProvider:provider catalog:catName
+                             catalogId:ident genres:[self arr:raw[@"genres"]]];
+                        if(!belongs)continue;
+                        NSDictionary *media=[self mediaFrom:raw type:kind base:base];
+                        if(media)[items addObject:media];
+                        if(items.count>=35)break;
+                    }
+                    [self appendItems:items to:self.catalogItems];
+                    [self refreshList];
+                }];
+            }
+        }];
+    }
 }
 - (void)toggleSearch {
     if([self.mode isEqualToString:@"episodes"]||[self.mode isEqualToString:@"streams"])
@@ -524,7 +631,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     }
 }
 - (void)changeSection {
-    self.filter = [@[@"Início",@"Filmes",@"Séries",@"Minha lista"] objectAtIndex:
+    self.filter = [@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"] objectAtIndex:
         (NSUInteger)MAX(0,self.sections.selectedSegmentIndex)];
     [self refreshList];
 }
@@ -577,8 +684,8 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
             [self.results addObject:item];
         }
     }
-    self.status.text = [NSString stringWithFormat:@"%lu título(s) • iPad iOS 9 • mídia HTTP/HLS",
-                        (unsigned long)self.results.count];
+    self.status.text = [NSString stringWithFormat:@"%lu título(s) • %@ • iOS 9",
+                        (unsigned long)self.results.count,self.categoryFilter?:@"Catálogos"];
     [self.table reloadData];
     [self.posterGrid reloadData];
     [self refreshHero];
