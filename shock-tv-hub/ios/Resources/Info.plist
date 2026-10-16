@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+ <key>CFBundleIdentifier</key><string>br.com.shocktv.legacy</string>
+ <key>CFBundleExecutable</key><string>ShockTV</string>
+ <key>CFBundleDisplayName</key><string>Shock TV</string>
+ <key>CFBundleName</key><string>ShockTV</string>
+ <key>CFBundlePackageType</key><string>APPL</string>
+ <key>CFBundleVersion</key><string>1</string>
+ <key>CFBundleShortVersionString</key><string>0.1.0</string>
+ <key>CFBundleDevelopmentRegion</key><string>pt_BR</string>
+ <key>LSRequiresIPhoneOS</key><true/>
+ <key>MinimumOSVersion</key><string>9.0</string>
+ <key>UIDeviceFamily</key><array><integer>2</integer></array>
+ <key>UIRequiresFullScreen</key><true/>
+ <key>UIStatusBarHidden</key><true/>
+ <key>UIBackgroundModes</key><array><string>audio</string></array>
+ <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string></array>
+ <key>CFBundleIcons~ipad</key><dict><key>CFBundlePrimaryIcon</key><dict>
+   <key>CFBundleIconFiles</key><array><string>AppIcon29x29</string><string>AppIcon40x40</string><string>AppIcon76x76</string><string>AppIcon83.5x83.5</string></array>
+ </dict></dict>
+ <key>CFBundleIconFiles</key><array><string>AppIcon29x29</string><string>AppIcon40x40</string><string>AppIcon76x76</string></array>
+ <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
+</dict></plist>
