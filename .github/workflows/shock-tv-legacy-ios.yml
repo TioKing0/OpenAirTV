@@ -2,7 +2,7 @@ name: Shock TV Source ZIP and iOS 9 IPA
 on:
   workflow_dispatch:
   push:
-    branches: [shock-tv-hub-studio]
+    branches: [shock-tv-ios-v0.2]
     paths:
       - "shock-tv-hub/ios/**"
       - ".github/workflows/shock-tv-legacy-ios.yml"
@@ -20,15 +20,15 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --prefix=Shock-TV-Hub/ \
-            -o dist/Shock-TV-Hub-v0.3.6-SOURCE.zip HEAD:shock-tv-hub
-          unzip -t dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | tail -n 2
-          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
-          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
-          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
+            -o dist/Shock-TV-iPad-v0.2.0-SOURCE.zip HEAD:shock-tv-hub
+          unzip -t dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | tail -n 2
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-Hub-v0.3.6-Complete-Source-ZIP
-          path: dist/Shock-TV-Hub-v0.3.6-SOURCE.zip
+          name: Shock-TV-iPad-v0.2.0-Complete-Source-ZIP
+          path: dist/Shock-TV-iPad-v0.2.0-SOURCE.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -108,12 +108,12 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry ShockTV-Legacy-iOS9-ARMv7.ipa Payload)
-          unzip -t dist/ShockTV-Legacy-iOS9-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa Payload)
+          unzip -t dist/ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-Legacy-iOS9-ARMv7-IPA
-          path: dist/ShockTV-Legacy-iOS9-ARMv7.ipa
+          name: Shock-TV-iOS9-v0.2.0-ARMv7-IPA
+          path: dist/ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30

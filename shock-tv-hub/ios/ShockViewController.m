@@ -1,4 +1,5 @@
 #import "ShockViewController.h"
+#import "ShockDetailViewController.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <CoreMedia/CoreMedia.h>
@@ -755,25 +756,33 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [self showDetails:item];
 }
 - (void)showDetails:(NSDictionary *)item {
-    NSString *name=[self str:item[@"name"]];
-    NSString *summary=[self str:item[@"description"]];
-    if(summary.length>550)summary=[[summary substringToIndex:550] stringByAppendingString:@"…"];
-    UIAlertController *sheet=[UIAlertController alertControllerWithTitle:name
-        message:summary.length?summary:@"Selecione uma opção para este título."
-        preferredStyle:UIAlertControllerStyleAlert];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"▶  Assistir" style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction *action){
-            if([[self str:item[@"type"]] isEqualToString:@"series"]&&![self str:item[@"_episode"]].length)
-                [self resolveEpisodes:item];
-            else [self resolveStreams:item];
-        }]];
-    BOOL liked=[self isMarked:item field:@"liked"],later=[self isMarked:item field:@"later"];
-    [sheet addAction:[UIAlertAction actionWithTitle:liked?@"♥  Remover curtido":@"♡  Curtir"
-        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self saveEntry:item update:@"liked"];}]];
-    [sheet addAction:[UIAlertAction actionWithTitle:later?@"✓  Tirar de assistir mais tarde":@"＋  Assistir mais tarde"
-        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self saveEntry:item update:@"later"];}]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Voltar" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:sheet animated:YES completion:nil];
+    if(!item)return;
+    self.detailItem=item;
+    ShockDetailViewController *detail=[[ShockDetailViewController alloc]initWithMedia:item
+        liked:[self isMarked:item field:@"liked"] later:[self isMarked:item field:@"later"]];
+    self.detailController=detail;
+    __weak ShockViewController *weakSelf=self;
+    __weak ShockDetailViewController *weakDetail=detail;
+    detail.onPlay=^{
+        ShockViewController *strong=weakSelf;
+        NSDictionary *chosen=strong.detailItem;
+        [weakDetail dismissViewControllerAnimated:YES completion:^{
+            strong.detailController=nil;
+            if([[strong str:chosen[@"type"]] isEqualToString:@"series"]&&
+                ![strong str:chosen[@"_episode"]].length)
+                [strong resolveEpisodes:chosen];
+            else [strong resolveStreams:chosen];
+        }];
+    };
+    detail.onLike=^{
+        [weakSelf saveEntry:item update:@"liked"];
+    };
+    detail.onLater=^{
+        [weakSelf saveEntry:item update:@"later"];
+    };
+    UINavigationController *navigation=[[UINavigationController alloc]initWithRootViewController:detail];
+    navigation.modalPresentationStyle=UIModalPresentationFullScreen;
+    [self presentViewController:navigation animated:YES completion:nil];
 }
 - (void)resolveEpisodes:(NSDictionary *)series {
     self.activeSeries=series;
