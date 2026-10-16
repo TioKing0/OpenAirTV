@@ -307,7 +307,10 @@ public final class MainActivity extends Activity {
             spotlightHolder.addView(empty,p);
             return;
         }
-        Media featured=knownItems.get(0);
+        Media chosen=null;
+        for(Media candidate:knownItems){if(!isChannel(candidate)){chosen=candidate;break;}}
+        if(chosen==null)return;
+        final Media featured=chosen;
         LinearLayout hero=new LinearLayout(this);
         hero.setOrientation(LinearLayout.HORIZONTAL);
         hero.setGravity(Gravity.CENTER_VERTICAL);
@@ -544,7 +547,14 @@ public final class MainActivity extends Activity {
     private String identity(Media item){return item.type+"|"+item.id;}
     private boolean isSeries(Media m){return !isChannel(m)&&"series".equals(m.displayType.isEmpty()?m.type:m.displayType);}
     private boolean isFilm(Media m){return !isChannel(m)&&"movie".equals(m.displayType.isEmpty()?m.type:m.displayType);}
-    private boolean isChannel(Media m){return "tv".equals(m.displayType)||"tv".equals(m.type)||"channel".equals(m.type);}
+    private boolean isChannel(Media m){
+        if("tv".equals(m.displayType)||"tv".equals(m.type)||"channel".equals(m.type))return true;
+        // Historical metadata can say series even though it came from a TV catalogue.
+        // Route legacy entries to the channel guide without deleting the user's library.
+        String source=normalizeCategory(m.source+" "+m.origin);
+        return source.contains("catalogo iptv production")||
+               source.contains("tvvio.baby beamup");
+    }
     private boolean hasGenre(Media m,String part){
         return m.genre!=null&&m.genre.toLowerCase(java.util.Locale.ROOT)
               .contains(part.toLowerCase(java.util.Locale.ROOT));
@@ -586,10 +596,10 @@ public final class MainActivity extends Activity {
             }
             addRowFrom("Outros títulos",matching(type),shown);
         }else{
-            addRowFrom("Novidades",matching(m->m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
+            addRowFrom("Novidades",matching(m->!isChannel(m)&&m.catalogId.toLowerCase(java.util.Locale.ROOT).contains("new")),shown);
             addRowFrom("Filmes para descobrir",matching(this::isFilm),shown);
             addRowFrom("Séries para maratonar",matching(this::isSeries),shown);
-            addRowFrom("Canais e TV",matching(this::isChannel),shown);
+            // Live signals are listed in their independent channel guide, not VOD rows.
         }
         if(knownItems.isEmpty()){
             TextView empty=text("Nenhum catálogo carregado. Verifique sua internet ou configure uma fonte em Fontes.",15,0xffb1c8d5,false);
