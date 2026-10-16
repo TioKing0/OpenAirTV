@@ -70,6 +70,10 @@ public final class MainActivity extends Activity {
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ExecutorService searchExecutor=Executors.newSingleThreadExecutor();
     private java.util.concurrent.Future<?> searchFuture;
+    private String chosenCategory="";
+    private int categoryGeneration=0;
+    private final ArrayList<Media> categoryResults=new ArrayList<>();
+    private TextView categoryStatus;
     private final ArrayList<String> sources=new ArrayList<>();
     private final Set<String> disabledBundled=new HashSet<>();
     private final LinkedHashMap<String,JSONObject> manifestCache =
@@ -195,6 +199,7 @@ public final class MainActivity extends Activity {
         navItem(sidebar,"▤","Séries","series");
         navItem(sidebar,"♡","Minha lista","minha");
         navItem(sidebar,"⌕","Buscar","buscar");
+        navItem(sidebar,"▦","Categorias","categorias");
         navItem(sidebar,"⊞","Fontes","fontes");
         View fill=new View(this);sidebar.addView(fill,new LinearLayout.LayoutParams(1,0,1f));
         TextView foot=text("TELARES TV\nv"+BuildConfig.VERSION_NAME,11,0xff648397,false);
@@ -232,6 +237,8 @@ public final class MainActivity extends Activity {
 
         if("buscar".equals(activeSection)){
             buildSearchPage();
+        }else if("categorias".equals(activeSection)){
+            buildCategoryPage();
         }else{
             if("inicio".equals(activeSection)||"minha".equals(activeSection))showPersonal();
             updateSpotlight();
@@ -245,6 +252,7 @@ public final class MainActivity extends Activity {
         if("filmes".equals(key))return "Filmes";
         if("series".equals(key))return "Séries";
         if("buscar".equals(key))return "Buscar";
+        if("categorias".equals(key))return "Categorias";
         if("minha".equals(key))return "Minha biblioteca";
         return "Início";
     }
@@ -524,7 +532,7 @@ public final class MainActivity extends Activity {
     }
     private void refreshCatalogRows(){
         if(catalogArea==null||showingDetails)return;
-        if("buscar".equals(activeSection))return; // Don't erase the search page while catalogs load.
+        if("buscar".equals(activeSection)||"categorias".equals(activeSection))return; // Keep dedicated discovery pages.
         catalogArea.removeAllViews();
         updateSpotlight();
         if("minha".equals(activeSection))return;
@@ -740,8 +748,8 @@ public final class MainActivity extends Activity {
     }
     @Override public void onBackPressed(){
         if(showingDetails){returnToBrowse();return;}
-        if("buscar".equals(activeSection)){
-            activeSection="inicio";searchGeneration++;render();return;
+        if("buscar".equals(activeSection)||"categorias".equals(activeSection)){
+            activeSection="inicio";searchGeneration++;categoryGeneration++;render();return;
         }
         super.onBackPressed();
     }
@@ -867,6 +875,129 @@ public final class MainActivity extends Activity {
                (dialog,which)->showAll(new String[]{"continue","later","liked","recent"}[which]))
            .setNegativeButton("Fechar",null).show();
     }
+    /** Platform categories follow addon catalogue provenance; never claim subscription rights. */
+    private void buildCategoryPage(){
+        TextView intro=text("Explore catálogos identificados pelos addons. Plataformas não confirmam disponibilidade oficial nem reprodução.",14,0xffa9c6d5,false);
+        catalogArea.addView(intro);
+        String[] tags={"Anime","Netflix","Max / HBO","Disney+"};
+        LinearLayout options=new LinearLayout(this);
+        options.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+        lp.topMargin=dp(18);catalogArea.addView(options,lp);
+        for(String tag:tags){
+            Button b=button((tag.equals(chosenCategory)?"●  ":"○  ")+tag,()->{
+                chosenCategory=tag;
+                requestCategory(tag);
+                // Keep focus stable after refreshing, including with the D-pad.
+            });
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(51));
+            p.bottomMargin=dp(8);options.addView(b,p);
+        }
+        categoryStatus=text(chosenCategory.isEmpty()?"Escolha uma categoria.":categoryResults.size()+" título(s) em "+chosenCategory,15,0xffb6d6e1,false);
+        LinearLayout.LayoutParams cap=new LinearLayout.LayoutParams(-1,-2);cap.topMargin=dp(18);
+        catalogArea.addView(categoryStatus,cap);
+        if(!categoryResults.isEmpty()){
+            addCatalog(chosenCategory,new ArrayList<>(categoryResults));
+        }
+    }
+    private boolean categoryMatch(String category,String provider,String catalogName,String catalogId,String genres){
+        String p=(provider+" "+catalogName+" "+catalogId).toLowerCase(Locale.ROOT);
+        if("Anime".equals(category))
+            return p.contains("anime") || genres.toLowerCase(Locale.ROOT).contains("anime");
+        if("Netflix".equals(category))return p.contains("netflix");
+        if("Max / HBO".equals(category))
+            return p.contains("hbo")||p.contains("hbomax")||p.contains("max catalog")||p.contains("max originals");
+        if("Disney+".equals(category))
+            return p.contains("disney+")||p.contains("disney plus")||p.contains("disneyplus");
+        return false;
+    }
+    private String genreArgument(JSONArray extras){
+        if(extras==null)return "";
+        for(int i=0;i<extras.length();i++){
+            JSONObject x=extras.optJSONObject(i);
+            if(x==null||!"genre".equals(x.optString("name")))continue;
+            JSONArray opts=x.optJSONArray("options");
+            if(opts==null)continue;
+            for(int j=0;j<opts.length();j++){
+                String value=opts.optString(j,"");
+                if(value.toLowerCase(Locale.ROOT).contains("anime")){
+                    try {return "/genre="+URLEncoder.encode(value,"UTF-8").replace("+","%20");}
+                    catch(Exception ex){return "";}
+                }
+            }
+        }
+        return "";
+    }
+    private void requestCategory(String category){
+        categoryGeneration++;
+        final int request=categoryGeneration;
+        categoryResults.clear();
+        render();
+        categoryStatus.setText("Consultando "+category+" nos addons...");
+        ArrayList<String> providers=new ArrayList<>(sources);
+        pool.execute(()->{
+            LinkedHashMap<String,Media> found=new LinkedHashMap<>();
+            int declared=0;
+            for(String source:providers){
+                if(request!=categoryGeneration||Thread.currentThread().isInterrupted())return;
+                try{
+                    JSONObject manifest=getManifest(source);
+                    JSONArray cats=manifest.optJSONArray("catalogs");
+                    if(cats==null)continue;
+                    String base=source.substring(0,source.length()-"manifest.json".length());
+                    String provider=manifest.optString("name","");
+                    int checked=0;
+                    for(int i=0;i<cats.length()&&checked<7;i++){
+                        if(request!=categoryGeneration)return;
+                        JSONObject c=cats.optJSONObject(i);if(c==null)continue;
+                        String type=c.optString("type",""),id=c.optString("id","");
+                        if(!("movie".equals(type)||"series".equals(type))||!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
+                        String name=c.optString("name","");
+                        boolean providerCatalog=categoryMatch(category,provider,name,id,"");
+                        String argument="Anime".equals(category)?genreArgument(c.optJSONArray("extra")):"";
+                        if(!providerCatalog&&argument.isEmpty()&&!"Anime".equals(category))continue;
+                        String path=base+"catalog/"+type+"/"+id+argument+".json";
+                        try{
+                            JSONArray metas=getJson(path).optJSONArray("metas");
+                            checked++;
+                            if(metas==null)continue;
+                            declared++;
+                            for(int j=0;j<metas.length()&&j<40;j++){
+                                JSONObject json=metas.optJSONObject(j);if(json==null)continue;
+                                String mid=json.optString("id",""),title=json.optString("name","");
+                                if(mid.isEmpty()||title.isEmpty())continue;
+                                JSONArray genres=json.optJSONArray("genres");
+                                StringBuilder genre=new StringBuilder();
+                                if(genres!=null)for(int k=0;k<genres.length()&&k<15;k++){
+                                    if(k>0)genre.append(",");
+                                    genre.append(genres.optString(k,""));
+                                }
+                                if(!providerCatalog&&argument.isEmpty()&&
+                                   !categoryMatch(category,provider,name,id,genre.toString()))continue;
+                                Media media=new Media();media.id=mid;media.name=title;
+                                media.type=json.optString("type",type);
+                                media.poster=json.optString("poster","");
+                                media.description=json.optString("description","");
+                                media.origin=provider;media.catalogId=id;
+                                media.source=base;media.genre=genre.toString();
+                                found.putIfAbsent(identity(media),media);
+                            }
+                        }catch(Exception ignored){}
+                    }
+                }catch(Exception ignored){}
+            }
+            final int candidateCount=declared;
+            runOnUiThread(()->{
+                if(!"categorias".equals(activeSection)||request!=categoryGeneration)return;
+                categoryResults.clear();categoryResults.addAll(found.values());
+                render();
+                categoryStatus.setText(categoryResults.isEmpty()?
+                    "Nenhum catálogo conectado declarou títulos para "+category+". Adicione um addon compatível em Fontes.":
+                    categoryResults.size()+" títulos • "+category+" • origem declarada pelos addons");
+            });
+        });
+    }
+
     /** Search screen rendered for a TV remote, not a modal limited to first-page items. */
     private void searchCatalog(){
         activeSection="buscar";
