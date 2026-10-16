@@ -879,7 +879,7 @@ public final class MainActivity extends Activity {
     private void buildCategoryPage(){
         TextView intro=text("Explore catálogos identificados pelos addons. Plataformas não confirmam disponibilidade oficial nem reprodução.",14,0xffa9c6d5,false);
         catalogArea.addView(intro);
-        String[] tags={"Anime","Netflix","Max / HBO","Disney+"};
+        String[] tags={"Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"};
         LinearLayout options=new LinearLayout(this);
         options.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
@@ -900,29 +900,55 @@ public final class MainActivity extends Activity {
             addCatalog(chosenCategory,new ArrayList<>(categoryResults));
         }
     }
-    private boolean categoryMatch(String category,String provider,String catalogName,String catalogId,String genres){
-        String p=(provider+" "+catalogName+" "+catalogId).toLowerCase(Locale.ROOT);
-        if("Anime".equals(category))
-            return p.contains("anime") || genres.toLowerCase(Locale.ROOT).contains("anime");
-        if("Netflix".equals(category))return p.contains("netflix");
+    /** Explicit addon category declarations; a platform label does not prove availability in Brazil. */
+    private String normalizeCategory(String value){
+        String form=java.text.Normalizer.normalize(value==null?"":value,java.text.Normalizer.Form.NFD);
+        return form.replaceAll("\\p{M}+","").toLowerCase(Locale.ROOT).replace('-',' ').replace('_',' ');
+    }
+    private String[] categoryAliases(String category){
+        if("Anime".equals(category))return new String[]{"anime","japanese animation","animacao japonesa"};
+        if("Documentários".equals(category))return new String[]{"documentario","documentary","documentaries","documental"};
+        if("Terror".equals(category))return new String[]{"terror","horror"};
+        if("Comédia".equals(category))return new String[]{"comedia","comedy"};
+        if("Ficção científica".equals(category))
+            return new String[]{"ficcao cientifica","science fiction","sci fi","scifi"};
+        if("Netflix".equals(category))return new String[]{"netflix"};
         if("Max / HBO".equals(category))
-            return p.contains("hbo")||p.contains("hbomax")||p.contains("max catalog")||p.contains("max originals");
-        if("Disney+".equals(category))
-            return p.contains("disney+")||p.contains("disney plus")||p.contains("disneyplus");
+            return new String[]{"hbo","hbo max","hbomax","max originals","max catalog","max tv"};
+        if("Disney+".equals(category))return new String[]{"disney+","disney plus","disneyplus"};
+        if("Prime Video".equals(category))return new String[]{"prime video","primevideo","amazon prime"};
+        if("Apple TV+".equals(category))return new String[]{"apple tv+","apple tv plus","appletv+","apple originals"};
+        if("Paramount+".equals(category))return new String[]{"paramount+","paramount plus","paramountplus"};
+        if("Crunchyroll".equals(category))return new String[]{"crunchyroll"};
+        return new String[0];
+    }
+    private boolean genreCategory(String name){
+        return "Anime".equals(name)||"Documentários".equals(name)||"Terror".equals(name)
+            ||"Comédia".equals(name)||"Ficção científica".equals(name);
+    }
+    private boolean categoryMatch(String category,String provider,String catalogName,String catalogId,String genres){
+        String origin=normalizeCategory(provider+" "+catalogName+" "+catalogId);
+        String genre=normalizeCategory(genres);
+        for(String label:categoryAliases(category)){
+            String term=normalizeCategory(label);
+            if(origin.contains(term)||(genreCategory(category)&&genre.contains(term)))return true;
+        }
         return false;
     }
-    private String genreArgument(JSONArray extras){
-        if(extras==null)return "";
+    private String genreArgument(JSONArray extras,String category){
+        if(extras==null||!genreCategory(category))return "";
         for(int i=0;i<extras.length();i++){
-            JSONObject x=extras.optJSONObject(i);
-            if(x==null||!"genre".equals(x.optString("name")))continue;
-            JSONArray opts=x.optJSONArray("options");
-            if(opts==null)continue;
-            for(int j=0;j<opts.length();j++){
-                String value=opts.optString(j,"");
-                if(value.toLowerCase(Locale.ROOT).contains("anime")){
-                    try {return "/genre="+URLEncoder.encode(value,"UTF-8").replace("+","%20");}
-                    catch(Exception ex){return "";}
+            JSONObject entry=extras.optJSONObject(i);
+            if(entry==null||!"genre".equals(entry.optString("name")))continue;
+            JSONArray options=entry.optJSONArray("options");
+            if(options==null)continue;
+            for(int j=0;j<options.length();j++){
+                String option=options.optString(j,""),normal=normalizeCategory(option);
+                for(String keyword:categoryAliases(category)){
+                    if(normal.contains(normalizeCategory(keyword))){
+                        try{return "/genre="+URLEncoder.encode(option,"UTF-8").replace("+","%20");}
+                        catch(Exception ignored){return "";}
+                    }
                 }
             }
         }
@@ -954,8 +980,8 @@ public final class MainActivity extends Activity {
                         if(!("movie".equals(type)||"series".equals(type))||!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
                         String name=c.optString("name","");
                         boolean providerCatalog=categoryMatch(category,provider,name,id,"");
-                        String argument="Anime".equals(category)?genreArgument(c.optJSONArray("extra")):"";
-                        if(!providerCatalog&&argument.isEmpty()&&!"Anime".equals(category))continue;
+                        String argument=genreArgument(c.optJSONArray("extra"),category);
+                        if(!providerCatalog&&argument.isEmpty()&&!genreCategory(category))continue;
                         String path=base+"catalog/"+type+"/"+id+argument+".json";
                         try{
                             JSONArray metas=getJson(path).optJSONArray("metas");
