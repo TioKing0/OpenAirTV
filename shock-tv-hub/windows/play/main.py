@@ -476,12 +476,11 @@ class TelaresPlay:
             self.play_source()
         def select_sources():
             candidates=catalog.streams(self.addons,item)
-            verified=catalog.verified(candidates)
-            if item.get("_kind")!="tv":return verified
-            # Linear broadcasts often reject small byte-range probes. Let VLC
-            # attempt HTTP/HLS URLs after checked candidates fail.
-            seen={x["_url"] for x in verified}
-            return verified+[x for x in candidates if x["_url"] not in seen]
+            if item.get("_kind")=="tv":
+                # Channels are continuous HLS/HTTP signals. Avoid downloading
+                # segments with Range before giving the bundled VLC a chance.
+                return [x for x in candidates[:16] if x["_url"].startswith(("http://","https://"))]
+            return catalog.verified(candidates)
         self.job(select_sources,done,
                 lambda reason:messagebox.showerror("Erro ao abrir o vídeo",reason))
 
