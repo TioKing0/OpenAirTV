@@ -5,6 +5,8 @@ on:
     branches: [telares-release-candidate]
     paths:
       - "shock-tv-hub/ios/**"
+      - "shock-tv-hub/windows/generate_icon.py"
+      - "shock-tv-hub/design/**"
       - ".github/workflows/shock-tv-legacy-ios.yml"
 
 permissions:
@@ -89,6 +91,14 @@ jobs:
           cp "$DIR/AppIcon40x40~ipad.png" "$DIR/AppIcon40x40.png"
           cp "$DIR/AppIcon76x76~ipad.png" "$DIR/AppIcon76x76.png"
 
+      - name: Verify Telares Play branding and automatic selector
+        run: |
+          grep -q 'CFBundleDisplayName</key><string>Telares Play' shock-tv-hub/ios/Resources/Info.plist
+          grep -q 'self.navigationItem.rightBarButtonItem=nil;' shock-tv-hub/ios/ShockViewController.m
+          if grep -Fq '[self installSourceControl];' shock-tv-hub/ios/ShockViewController.m; then
+            echo "Unexpected source selector in native player"
+            exit 1
+          fi
       - name: Compile ARMv7 iOS 9 application
         env:
           THEOS: ${{ github.workspace }}/theos
