@@ -328,30 +328,56 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         [self refreshList];
     }
 }
+- (NSString *)normalizedCategory:(NSString *)source {
+    NSString *folded=[[self str:source] stringByFoldingWithOptions:NSDiacriticInsensitiveSearch
+        locale:[NSLocale localeWithLocaleIdentifier:@"pt_BR"]];
+    folded=folded.lowercaseString;
+    return [[folded stringByReplacingOccurrencesOfString:@"-" withString:@" "]
+        stringByReplacingOccurrencesOfString:@"_" withString:@" "];
+}
+- (NSArray *)categoryAliases:(NSString *)tag {
+    if([tag isEqualToString:@"Anime"])return @[@"anime",@"japanese animation",@"animacao japonesa"];
+    if([tag isEqualToString:@"Documentários"])return @[@"documentario",@"documentary",@"documentaries",@"documental"];
+    if([tag isEqualToString:@"Terror"])return @[@"terror",@"horror"];
+    if([tag isEqualToString:@"Comédia"])return @[@"comedia",@"comedy"];
+    if([tag isEqualToString:@"Ficção científica"])return @[@"ficcao cientifica",@"science fiction",@"sci fi",@"scifi"];
+    if([tag isEqualToString:@"Netflix"])return @[@"netflix"];
+    if([tag isEqualToString:@"Max / HBO"])return @[@"hbo",@"hbo max",@"hbomax",@"max originals",@"max catalog",@"max tv"];
+    if([tag isEqualToString:@"Disney+"])return @[@"disney+",@"disney plus",@"disneyplus"];
+    if([tag isEqualToString:@"Prime Video"])return @[@"prime video",@"primevideo",@"amazon prime"];
+    if([tag isEqualToString:@"Apple TV+"])return @[@"apple tv+",@"apple tv plus",@"appletv+",@"apple originals"];
+    if([tag isEqualToString:@"Paramount+"])return @[@"paramount+",@"paramount plus",@"paramountplus"];
+    if([tag isEqualToString:@"Crunchyroll"])return @[@"crunchyroll"];
+    return @[];
+}
+- (BOOL)genreCategory:(NSString *)tag {
+    return [@[@"Anime",@"Documentários",@"Terror",@"Comédia",@"Ficção científica"] containsObject:tag];
+}
 - (BOOL)category:(NSString *)tag fromProvider:(NSString *)provider catalog:(NSString *)catalog
     catalogId:(NSString *)ident genres:(NSArray *)genres {
-    NSString *origin=[NSString stringWithFormat:@"%@ %@ %@",provider?:@"",catalog?:@"",ident?:@""];
-    origin=origin.lowercaseString;
-    if([tag isEqualToString:@"Anime"]){
-        if([origin containsString:@"anime"])return YES;
-        for(id value in genres)if([[self str:value].lowercaseString containsString:@"anime"])return YES;
-        return NO;
+    NSString *origin=[self normalizedCategory:[NSString stringWithFormat:@"%@ %@ %@",
+        provider?:@"",catalog?:@"",ident?:@""]];
+    for(NSString *keyword in [self categoryAliases:tag]){
+        NSString *word=[self normalizedCategory:keyword];
+        if([origin containsString:word])return YES;
+        if([self genreCategory:tag]){
+            for(id name in genres)if([[self normalizedCategory:[self str:name]] containsString:word])
+                return YES;
+        }
     }
-    if([tag isEqualToString:@"Netflix"])return [origin containsString:@"netflix"];
-    if([tag isEqualToString:@"Max / HBO"])
-        return [origin containsString:@"hbo"]||[origin containsString:@"max catalog"]||
-               [origin containsString:@"max originals"]||[origin containsString:@"hbomax"];
-    if([tag isEqualToString:@"Disney+"])
-        return [origin containsString:@"disney+"]||[origin containsString:@"disney plus"]||
-               [origin containsString:@"disneyplus"];
     return NO;
 }
-- (NSString *)animeExtra:(NSDictionary *)catalog {
-    for(NSDictionary *extra in [self arr:catalog[@"extra"]]){
-        if(![[self str:extra[@"name"]] isEqualToString:@"genre"])continue;
-        for(NSString *value in [self arr:extra[@"options"]])
-            if([[self str:value].lowercaseString containsString:@"anime"])
-                return [@"/genre=" stringByAppendingString:[self pathEncode:value]];
+- (NSString *)genreExtra:(NSDictionary *)catalog forCategory:(NSString *)tag {
+    if(![self genreCategory:tag])return @"";
+    for(NSDictionary *entry in [self arr:catalog[@"extra"]]){
+        if(![[self str:entry[@"name"]] isEqualToString:@"genre"])continue;
+        for(id option in [self arr:entry[@"options"]]){
+            NSString *value=[self str:option],*normalized=[self normalizedCategory:value];
+            for(NSString *word in [self categoryAliases:tag]){
+                if([normalized containsString:[self normalizedCategory:word]])
+                    return [@"/genre=" stringByAppendingString:[self pathEncode:value]];
+            }
+        }
     }
     return @"";
 }
@@ -359,7 +385,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     UIAlertController *dialog=[UIAlertController alertControllerWithTitle:@"Categorias Telares"
         message:@"Catálogos declarados pelos addons. Não comprovam disponibilidade oficial ou assinatura de streaming."
         preferredStyle:UIAlertControllerStyleActionSheet];
-    for(NSString *tag in @[@"Anime",@"Netflix",@"Max / HBO",@"Disney+"]){
+    for(NSString *tag in @[@"Anime",@"Netflix",@"Max / HBO",@"Disney+",@"Prime Video",@"Apple TV+",@"Paramount+",@"Crunchyroll", @"Documentários",@"Terror",@"Comédia",@"Ficção científica"]){
         [dialog addAction:[UIAlertAction actionWithTitle:tag
             style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
                 self.searching=NO;
@@ -402,8 +428,8 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                 if([ident rangeOfCharacterFromSet:[safe invertedSet]].location!=NSNotFound)continue;
                 NSString *catName=[self str:cat[@"name"]];
                 BOOL providerCatalog=[self category:tag fromProvider:provider catalog:catName catalogId:ident genres:@[]];
-                NSString *genre=[tag isEqualToString:@"Anime"]?[self animeExtra:cat]:@"";
-                if(!providerCatalog&&!genre.length&&![tag isEqualToString:@"Anime"])continue;
+                NSString *genre=[self genreExtra:cat forCategory:tag];
+                if(!providerCatalog&&!genre.length&&![self genreCategory:tag])continue;
                 loaded++;
                 NSString *url=[NSString stringWithFormat:@"%@catalog/%@/%@%@.json",
                     base,[self pathEncode:kind],[self pathEncode:ident],genre];
