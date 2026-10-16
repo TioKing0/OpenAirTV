@@ -69,4 +69,35 @@ class CatalogTest(unittest.TestCase):
             self.assertIn(tag,android)
             self.assertIn(tag,ipad)
 
+    def test_new_addons_are_bundled(self):
+        links=["https://catalogo-iptv-production.up.railway.app/manifest.json",
+               "https://plaviohd.edon.workers.dev/manifest.json",
+               "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
+               "https://h-gate.site/dc/manifest.json"]
+        self.assertTrue(all(link in catalog.DEFAULT for link in links))
+    def test_tvvio_catalog_discovery(self):
+        self.assertEqual("tv",catalog.effective_kind("tv","Todos","tvvio_channels"))
+        self.assertEqual("tv",catalog.effective_kind("channel","Live","channels"))
+        self.assertEqual("movie",catalog.effective_kind("DC Universe","Movies","103575:movies"))
+        self.assertEqual("series",catalog.effective_kind("DC Universe","Series","103575:series"))
+        manifest_doc={"id":"org.tvvio","name":"Tvvio","resources":["catalog","stream"],
+                      "catalogs":[{"type":"tv","id":"tvvio_channels","name":"Todos"}]}
+        def endpoint(url):
+            if "/catalog/tv/" in url:return {"metas":[{"id":"tvvio:canal","name":"Canal Teste","type":"tv"}]}
+            raise ValueError(url)
+        with patch.object(catalog,"manifest",return_value=manifest_doc),patch.object(catalog,"get_json",side_effect=endpoint):
+            rows=catalog.discover(["https://example.com/manifest.json"],kind="tv")
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["_kind"],"tv")
+        self.assertEqual(rows[0]["type"],"tv")
+    def test_existing_movie_series_not_mixed_with_live(self):
+        manifest_doc={"id":"provider","name":"Test","resources":["catalog"],
+            "catalogs":[{"type":"tv","id":"channels","name":"Live"},{"type":"movie","id":"top","name":"Movies"}]}
+        def endpoint(url):
+            if "/catalog/tv/" in url:return {"metas":[{"type":"tv","name":"TV","id":"tv:1"}]}
+            return {"metas":[{"type":"movie","name":"Filme","id":"tt1"}]}
+        with patch.object(catalog,"manifest",return_value=manifest_doc),patch.object(catalog,"get_json",side_effect=endpoint):
+            titles=catalog.discover(["https://example.com/manifest.json"])
+        self.assertEqual([x["_kind"] for x in titles],["movie"])
+
 if __name__=="__main__":unittest.main()

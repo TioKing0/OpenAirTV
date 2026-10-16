@@ -46,8 +46,10 @@ class TelaresPlay:
         try:self.root.iconbitmap(default=str(pathlib.Path(getattr(sys,"_MEIPASS",pathlib.Path(__file__).parent))/"TelaresPlay.ico"))
         except Exception:pass
         self.data=load_state();self.data.setdefault("entries",{})
-        self.addons=list(dict.fromkeys((self.data.get("addons") or [])+catalog.DEFAULT))
-        # Merge new default manifests on upgrade without deleting custom sources or library.
+        self.removed_defaults=set(self.data.get("removed_default_addons",[]))
+        self.addons=list(dict.fromkeys((self.data.get("addons") or [])+
+            [url for url in catalog.DEFAULT if url not in self.removed_defaults]))
+        # Preserve user-customized addons and explicit opt-outs while migrating new defaults.
         self.data["addons"]=self.addons
         persist(self.data)
         self.executor=concurrent.futures.ThreadPoolExecutor(max_workers=7)
@@ -490,7 +492,10 @@ class TelaresPlay:
             except Exception as e:messagebox.showwarning("URL inválida",str(e),parent=window);return
             def complete(value):
                 if src not in self.addons:
-                    self.addons.append(src);self.data["addons"]=self.addons
+                    self.addons.append(src)
+                    self.removed_defaults.discard(src)
+                    self.data["addons"]=self.addons
+                    self.data["removed_default_addons"]=sorted(self.removed_defaults)
                     persist(self.data);listing.insert("end",src)
             self.job(lambda:catalog.manifest(src),complete,
                      lambda error:messagebox.showerror("Falha no addon",error,parent=window))
@@ -498,6 +503,8 @@ class TelaresPlay:
             selection=listing.curselection()
             if not selection:return
             value=listing.get(selection[0]);self.addons.remove(value)
+            if value in catalog.DEFAULT:self.removed_defaults.add(value)
+            self.data["removed_default_addons"]=sorted(self.removed_defaults)
             self.data["addons"]=self.addons;persist(self.data);listing.delete(selection[0])
         self.btn(buttons,"Adicionar",add,CYAN,BG).pack(side="left",padx=7)
         self.btn(buttons,"Remover selecionado",remove).pack(side="left",padx=7)

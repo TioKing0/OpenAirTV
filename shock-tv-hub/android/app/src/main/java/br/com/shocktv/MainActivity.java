@@ -899,13 +899,14 @@ public final class MainActivity extends Activity {
     private void buildCategoryPage(){
         TextView intro=text("Explore catálogos identificados pelos addons. Plataformas não confirmam disponibilidade oficial nem reprodução.",14,0xffa9c6d5,false);
         catalogArea.addView(intro);
-        String[] tags={"Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"};
+        String[] tags={"Canais ao vivo","Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"};
         LinearLayout options=new LinearLayout(this);
         options.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
         lp.topMargin=dp(18);catalogArea.addView(options,lp);
         for(String tag:tags){
             Button b=button((tag.equals(chosenCategory)?"●  ":"○  ")+tag,()->{
+                if("Canais ao vivo".equals(tag)){activeSection="aovivo";render();return;}
                 chosenCategory=tag;
                 requestCategory(tag);
                 // Keep focus stable after refreshing, including with the D-pad.
