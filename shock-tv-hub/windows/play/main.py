@@ -46,7 +46,10 @@ class TelaresPlay:
         try:self.root.iconbitmap(default=str(pathlib.Path(getattr(sys,"_MEIPASS",pathlib.Path(__file__).parent))/"TelaresPlay.ico"))
         except Exception:pass
         self.data=load_state();self.data.setdefault("entries",{})
-        self.addons=self.data.get("addons") or list(catalog.DEFAULT)
+        self.addons=list(dict.fromkeys((self.data.get("addons") or [])+catalog.DEFAULT))
+        # Merge new default manifests on upgrade without deleting custom sources or library.
+        self.data["addons"]=self.addons
+        persist(self.data)
         self.executor=concurrent.futures.ThreadPoolExecutor(max_workers=7)
         self.messages=queue.Queue()
         self.results=[]
@@ -106,7 +109,7 @@ class TelaresPlay:
         self.label(self.nav,"TELARES",24,CYAN,True,bg=PANEL).pack(anchor="w",padx=25,pady=(28,0))
         self.label(self.nav,"P L A Y    •    WINDOWS",10,MUTED,bg=PANEL).pack(anchor="w",padx=26,pady=(0,26))
         self.nav_buttons={}
-        for label in ("Início","Filmes","Séries","Buscar","Categorias","Continuar assistindo","Minha lista","Fontes"):
+        for label in ("Início","Filmes","Séries","Canais ao vivo","Buscar","Categorias","Continuar assistindo","Minha lista","Fontes"):
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
@@ -161,12 +164,15 @@ class TelaresPlay:
         self.heading.config(text="Explorar categorias")
         panel=self.scroll_frame()
         self.label(panel,"Escolha um catálogo ou gênero",20,WHITE,True).pack(anchor="w",padx=28,pady=(22,13))
-        for name in catalog.CATEGORY_OPTIONS:
+        for name in ("Canais ao vivo",)+tuple(catalog.CATEGORY_OPTIONS):
             self.btn(panel,name,lambda tag=name:self.select_category(tag),PANEL,padx=20,pady=13).pack(anchor="w",fill="x",padx=28,pady=5)
         self.label(panel,"Esses filtros complementam Filmes e Séries. Plataformas: catálogos dos addons, sem confirmar disponibilidade no Brasil.",
             11,MUTED,wraplength=720).pack(anchor="w",padx=28,pady=18)
 
     def select_category(self,tag):
+        if tag=="Canais ao vivo":
+            self.open_section(tag)
+            return
         self.section="Categorias"
         self.heading.config(text=tag)
         self.req+=1
@@ -206,13 +212,13 @@ class TelaresPlay:
     def reload(self,query=""):
         self.req+=1
         current=self.req
-        kind="movie" if self.section=="Filmes" else "series" if self.section=="Séries" else "all"
+        kind="movie" if self.section=="Filmes" else "series" if self.section=="Séries" else "tv" if self.section=="Canais ao vivo" else "all"
         self.status_set("Consultando addons... Aguarde.")
         self.results=[];self.render_grid()
         def done(items):
             if current!=self.req or self.playing:return
             self.results=items
-            self.status_set("{} título(s) encontrados • Catálogos reais".format(len(items)))
+            self.status_set("{} {} • Catálogos reais".format(len(items),"canais" if kind=="tv" else "títulos"))
             self.render_grid()
         self.job(lambda:catalog.discover(self.addons,query,kind),done,
                 lambda error:self.status_set("Falha ao consultar os catálogos: "+error))
@@ -301,7 +307,7 @@ class TelaresPlay:
     def show_detail(self,item):
         self.detail=item
         target=self.scroll_frame()
-        self.heading.config(text="Detalhes")
+        self.heading.config(text="Canais ao vivo" if item.get("_kind")=="tv" else "Detalhes")
         self.status_set("Metadados fornecidos pelos addons conectados")
         box=tk.Frame(target,bg=LIFT)
         box.pack(fill="x",padx=28,pady=22)
@@ -310,13 +316,14 @@ class TelaresPlay:
         self.label(box,item.get("description","Sem sinopse disponível.")[:1050],13,MUTED,bg=LIFT,
                    wraplength=680).pack(anchor="w",padx=23,pady=15)
         actions=tk.Frame(box,bg=LIFT);actions.pack(anchor="w",padx=21,pady=(0,22))
-        self.btn(actions,"▶  Assistir",lambda:self.start_title(item),CYAN,BG).pack(side="left",padx=3)
+        self.btn(actions,"▶  Assistir ao vivo" if item.get("_kind")=="tv" else "▶  Assistir",
+                 lambda:self.start_title(item),CYAN,BG).pack(side="left",padx=3)
         entry=self.get_entry(item)
         self.btn(actions,"♥  Curtido" if entry.get("liked") else "♡  Curtir",
                  lambda:self.toggle_saved(item,"liked"),PANEL).pack(side="left",padx=6)
         self.btn(actions,"✓  Na lista" if entry.get("later") else "+  Assistir mais tarde",
                  lambda:self.toggle_saved(item,"later"),PANEL).pack(side="left",padx=6)
-        if item.get("type")=="series":
+        if item.get("_kind",item.get("type"))=="series":
             self.label(target,"Episódios",18,WHITE,True).pack(anchor="w",padx=28,pady=12)
             list_box=tk.Frame(target,bg=BG);list_box.pack(fill="x",padx=28)
             generation=self.req
@@ -357,7 +364,7 @@ class TelaresPlay:
             self.source_list=source_list
             self.source_index=0
             self.current_item=item
-            self.resume_sec=float(self.get_entry(item).get("position") or 0)
+            self.resume_sec=0 if item.get("_kind")=="tv" else float(self.get_entry(item).get("position") or 0)
             self.enter_player()
             self.play_source()
         self.job(lambda:catalog.verified(catalog.streams(self.addons,item)),done,
@@ -415,8 +422,11 @@ class TelaresPlay:
         elif event=="error":
             self.next_source()
         elif event=="ended":
-            self.save_progress()
-            self.exit_player()
+            if self.current_item and self.current_item.get("_kind")=="tv":
+                self.next_source()
+            else:
+                self.save_progress()
+                self.exit_player()
 
     def tick(self):
         if self.playing and self.video:
@@ -428,6 +438,7 @@ class TelaresPlay:
 
     def save_progress(self):
         if not self.playing or not self.video or not self.current_item or not self.started:return
+        if self.current_item.get("_kind")=="tv":return
         pos=self.video.position()
         if pos<2:return
         ident=self.token(self.current_item)
@@ -451,7 +462,8 @@ class TelaresPlay:
         if self.playing and self.video:self.video.pause()
 
     def jump(self,seconds):
-        if self.playing and self.video:self.video.seek(seconds)
+        if self.playing and self.video and (not self.current_item or self.current_item.get("_kind")!="tv"):
+            self.video.seek(seconds)
 
     def fullscreen(self):
         self.full=not self.full
