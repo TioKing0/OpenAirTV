@@ -26,12 +26,12 @@ public final class MainActivity extends Activity {
         layout.setPadding(dp(24), dp(35), dp(24), dp(26));
         scroll.addView(layout);
 
-        TextView title = text("Legacy TV Hub", 30, Color.WHITE);
+        TextView title = text("Telares Install", 30, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         layout.addView(title);
-        layout.addView(text("ANDROID • v" + BuildConfig.VERSION_NAME, 12, 0xff89b2d8));
+        layout.addView(text("ANDROID • v" + BuildConfig.VERSION_NAME, 12, 0xff9bb8c7));
         layout.addView(text("Samsung J4300 • Wi-Fi sem pendrive", 18, Color.WHITE));
-        layout.addView(text("MODO 1 — ACESSO PELO NAVEGADOR DA TV", 14, 0xff86c5f3));
+        layout.addView(text("MODO 1 — ACESSO PELO NAVEGADOR DA TV", 14, 0xff68d8e9));
         layout.addView(text("O celular hospeda a interface na rede local. Não precisa de PC, USB ou root. Abra o navegador da TV e digite o endereço exibido abaixo.", 15, 0xffc1ccd8));
 
         action = new Button(this);

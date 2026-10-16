@@ -28,3 +28,7 @@ Este projeto usa uma branch isolada `legacy-tv-hub-v0.1` do repositório OpenAir
 Para instalar de verdade no Smart Hub via Wi-Fi, é preciso disponibilizar o widget Orsay em um servidor acessível na porta 80 (por exemplo, uma ponte externa dedicada), respeitando o protocolo Orsay. Ainda não há instalador nativo Wi-Fi que funcione só com este Android sem root.
 
 **APK Android**: builds debug no GitHub usam chaves temporárias e poderão exigir desinstalar uma versão debug anterior. Nunca afirmar compatibilidade de atualização até a chave de assinatura permanente ser configurada. Configurar quatro secrets: `LEGACY_TV_HUB_KEYSTORE_B64`, `LEGACY_TV_HUB_STORE_PASSWORD`, `LEGACY_TV_HUB_KEY_ALIAS`, `LEGACY_TV_HUB_KEY_PASSWORD`.
+
+## Telares Install (marca unificada)
+
+Nome visual atualizado para Telares Install, mantendo o applicationId e widget ID LegacyTVHub. O pacote Samsung Orsay segue como **protótipo de diagnóstico**, não como serviço de streaming e não como prova de instalação/compatibilidade em todas as gerações de TV. A ferramenta Windows opera um servidor HTTP na porta 80 para sincronização no modelo Orsay compatível; requer teste na TV real. A ferramenta Android auxilia no navegador da TV por Wi-Fi, mas não realiza instalação nativa Orsay sem ponte apropriada. Não promover como instalador universal.

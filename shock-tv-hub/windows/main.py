@@ -1,4 +1,4 @@
-"""Shock TV Hub Studio - Windows installer for Samsung Orsay.
+"""Telares Install - Windows installer for Samsung Orsay.
 Standalone, no cloud, admin not normally required. Requires local port 80 and TV developer mode.
 """
 import http.server
@@ -15,10 +15,10 @@ from tkinter import ttk, filedialog, messagebox
 import xml.etree.ElementTree as ET
 import zipfile
 
-TITLE = "Shock TV Hub Studio"
+TITLE = "Telares Install"
 PORT = 80
 PACKAGE_NAME = "LegacyTVHub"
-VERSION = "0.1.0"
+VERSION = "1.0.0-rc1"
 
 
 def bundled(name):
@@ -59,7 +59,7 @@ def widget_xml(ip, file_name, details):
     widget = ET.SubElement(listing, "widget", {"id": PACKAGE_NAME})
     ET.SubElement(widget, "title").text = details["name"]
     ET.SubElement(widget, "compression", {"type": "zip", "size": str(details["size"])})
-    ET.SubElement(widget, "description").text = "Shock TV Hub Studio"
+    ET.SubElement(widget, "description").text = "Telares Install"
     ET.SubElement(widget, "download").text = f"http://{ip}/Widget/{file_name}"
     return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="utf-8")
 
@@ -77,7 +77,7 @@ class InstallerHandler(http.server.BaseHTTPRequestHandler):
         elif path == "/Widget/" + self.server.widget_file:
             self.send_file(self.server.widget_bytes, "application/zip")
         elif path == "/health":
-            self.send_file(b"Shock TV Hub Studio OK", "text/plain; charset=utf-8")
+            self.send_file(b"Telares Install OK", "text/plain; charset=utf-8")
         else:
             self.send_error(404, "Not Found")
 
@@ -99,7 +99,7 @@ class Studio:
         self.root.title(TITLE)
         self.root.geometry("880x645")
         self.root.minsize(710, 560)
-        self.root.configure(bg="#0b1522")
+        self.root.configure(bg="#091420")
         self.http = None
         self.worker = None
         self.asset = None
@@ -119,23 +119,23 @@ class Studio:
         style.configure("TEntry", padding=9)
 
     def label(self, parent, value, size=12, color="#d4e5f0", bold=False):
-        t = tk.Label(parent, text=value, bg="#0b1522", fg=color, font=("Segoe UI", size, "bold" if bold else "normal"),
+        t = tk.Label(parent, text=value, bg="#091420", fg=color, font=("Segoe UI", size, "bold" if bold else "normal"),
                      anchor="w", justify="left")
         t.pack(fill="x", pady=(0, 7))
         return t
 
     def draw(self):
-        container = tk.Frame(self.root, bg="#0b1522", padx=37, pady=27)
+        container = tk.Frame(self.root, bg="#091420", padx=37, pady=27)
         container.pack(fill="both", expand=True)
-        self.label(container, "SHOCK   TV  HUB", 29, "#7ce3eb", True)
+        self.label(container, "TELARES  INSTALL", 29, "#68d8e9", True)
         self.label(container, "Studio para Windows  •  Samsung Smart Hub Orsay  •  Instalação local", 12, "#aecbdb")
         self.label(container, "1    Pacote Orsay", 15, "#ffffff", True)
-        row = tk.Frame(container, bg="#0b1522")
+        row = tk.Frame(container, bg="#091420")
         row.pack(fill="x", pady=(0, 15))
         ttk.Button(row, text="Escolher widget ZIP", command=self.select_widget).pack(side="left", padx=(0, 15))
-        tk.Label(row, textvariable=self.info, bg="#0b1522", fg="#b7d1dc", font=("Segoe UI", 11)).pack(side="left")
+        tk.Label(row, textvariable=self.info, bg="#091420", fg="#b7d1dc", font=("Segoe UI", 11)).pack(side="left")
         self.label(container, "2    Endereço do computador na rede", 15, "#ffffff", True)
-        frame = tk.Frame(container, bg="#0b1522")
+        frame = tk.Frame(container, bg="#091420")
         frame.pack(fill="x", pady=(0, 15))
         ttk.Entry(frame, textvariable=self.ip, width=25, font=("Consolas", 14)).pack(side="left", padx=(0, 14))
         ttk.Button(frame, text="Iniciar servidor porta 80", command=self.toggle).pack(side="left")
@@ -144,10 +144,10 @@ class Studio:
         self.label(container, "3    Instalação na TV", 15, "#ffffff", True)
         self.label(container, "Smart Hub → login develop → IP Setting → Start User App Sync.\n"
                              "O menu depende do modelo e firmware. A sincronização é iniciada na televisão.", 11, "#cfdeeb")
-        self.label(container, "Verificação local:", 11, "#7ce3eb", True)
-        tk.Label(container, textvariable=self.stage, bg="#0b1522", fg="#ffffff",
+        self.label(container, "Verificação local:", 11, "#68d8e9", True)
+        tk.Label(container, textvariable=self.stage, bg="#091420", fg="#ffffff",
                  wraplength=760, justify="left", anchor="w", font=("Consolas", 11)).pack(fill="x", pady=(0, 8))
-        self.label(container, "REGISTRO DO SERVIDOR", 11, "#7ce3eb", True)
+        self.label(container, "REGISTRO DO SERVIDOR", 11, "#68d8e9", True)
         self.logview = tk.Text(container, bg="#101f2c", fg="#c9e0ea", font=("Consolas", 10),
                                relief="flat", wrap="word", height=9, state="disabled")
         self.logview.pack(fill="both", expand=True)
@@ -163,7 +163,7 @@ class Studio:
         self.root.after(0, do)
 
     def load_packaged_widget(self):
-        pkg = bundled("LegacyTVHub_0.1.2.zip")
+        pkg = bundled("LegacyTVHub_0.1.3.zip")
         try:
             self.asset = pkg.read_bytes()
             details = inspect_widget(self.asset)

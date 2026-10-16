@@ -12,8 +12,8 @@
   <audiomute itemtype="boolean">n</audiomute>
   <videomute itemtype="boolean">n</videomute>
   <dcont itemtype="string">y</dcont>
-  <widgetname itemtype="string">Legacy TV Hub</widgetname>
-  <description itemtype="string">Diagnostico integrado</description>
+  <widgetname itemtype="string">Telares TV Legacy</widgetname>
+  <description itemtype="string">Diagnóstico de compatibilidade Samsung Orsay</description>
   <width itemtype="number">960</width>
   <height itemtype="number">540</height>
 </widget>

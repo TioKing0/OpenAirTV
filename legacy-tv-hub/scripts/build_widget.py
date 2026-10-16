@@ -20,7 +20,18 @@ def png(width, height):
         pixels.append(0)
         for x in range(width):
             edge = x < 6 or y < 6 or x >= width - 6 or y >= height - 6
-            pixels.extend((22, 35, 53) if edge else (65, 163, 233))
+            ix = x / max(1, width)
+            iy = y / max(1, height)
+            frame = 0.13 < ix < 0.87 and 0.12 < iy < 0.88
+            inside = 0.20 < ix < 0.80 and 0.20 < iy < 0.80
+            triangle = 0.38 < ix < 0.68 and abs(iy - 0.50) < (ix - 0.38) * 1.12
+            if edge or (frame and not inside):
+                color = (104, 216, 233)
+            elif triangle:
+                color = (104, 216, 233)
+            else:
+                color = (9, 20, 32)
+            pixels.extend(color)
     def chunk(tag, data):
         return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
     return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>2I5B', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(pixels), 9)) + chunk(b'IEND', b'')
@@ -55,7 +66,7 @@ def main():
     for package, path in ((network, 'config.xml'), (usb, widget_id + '/config.xml')):
         with ZipFile(package) as z:
             cfg = z.read(path)
-            assert b'<widgetname itemtype="string">Legacy TV Hub</widgetname>' in cfg
+            assert b'<widgetname itemtype="string">Telares TV Legacy</widgetname>' in cfg
             assert version.encode('ascii') in cfg
     print('Orsay LAN widget:', network, network.stat().st_size)
     print('Orsay USB package:', usb, usb.stat().st_size)
