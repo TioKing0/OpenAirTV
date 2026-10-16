@@ -553,7 +553,9 @@ public final class MainActivity extends Activity {
         Set<String> shown=new HashSet<>();
         if("aovivo".equals(activeSection)){
             addRowFrom("Canais ao vivo",matching(this::isChannel),shown);
-            if(knownItems.stream().noneMatch(this::isChannel))
+            boolean foundLive=false;
+            for(Media candidate:knownItems)if(isChannel(candidate)){foundLive=true;break;}
+            if(!foundLive)
                 catalogArea.addView(text("Nenhum canal carregado. Verifique IPTV/Tvvio em Fontes.",15,0xffb1c8d5,false));
         }else if("filmes".equals(activeSection)||"series".equals(activeSection)){
             boolean movie="filmes".equals(activeSection);
