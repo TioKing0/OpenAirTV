@@ -49,20 +49,22 @@ class CatalogTest(unittest.TestCase):
         options={"extra":[{"name":"genre","options":["Documentary","Sci-Fi","Horror","Comedy"]}]}
         for label in ("Documentários","Ficção científica","Terror","Comédia"):
             self.assertTrue(catalog.declared_genre(options,label).startswith("/genre="))
-    def test_removed_anime_category_but_preserved_animation_shelf(self):
-        self.assertNotIn("Anime",catalog.CATEGORY_OPTIONS)
-        self.assertNotIn("Anime",catalog.GENRE_ALIASES)
+    def test_anime_is_additive_and_animation_remains(self):
+        self.assertIn("Anime",catalog.CATEGORY_OPTIONS)
+        self.assertIn("Anime",catalog.GENRE_ALIASES)
+        self.assertIn("Anime",catalog.category_of("Anime","Addon",["Anime"],"anime"))
+        self.assertNotIn("Anime",catalog.category_of("Generic","Addon",["Animation"],"top"))
         root=pathlib.Path(__file__).resolve().parents[3]
         android=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
         ipad=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
         self.assertIn('"Animação","Ficção científica"',android)
-        self.assertNotIn('if("Anime".equals(category))',android)
-        self.assertNotIn('if([tag isEqualToString:@"Anime"])',ipad)
+        self.assertIn('if("Anime".equals(category))',android)
+        self.assertIn('if([tag isEqualToString:@"Anime"])',ipad)
         self.assertIn('@"Filmes"',ipad)
         self.assertIn('@"Séries"',ipad)
 
     def test_existing_categories_kept(self):
-        self.assertEqual({"Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
+        self.assertEqual({"Anime","Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
         self.assertEqual({"Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"}.difference(catalog.CATEGORY_OPTIONS),set())
 
     def test_navigation_and_original_genres_are_preserved(self):
@@ -132,7 +134,7 @@ class CatalogTest(unittest.TestCase):
         java=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
         self.assertIn("isBroadcastCatalog:catalog manifest:manifest source:url",ios)
         self.assertIn("isBroadcastCatalog:cat manifest:manifest source:source",ios)
-        self.assertIn('type=[self str:item[@"_kind"]]',ios)
+        self.assertIn('type=[self isLiveItem:item]?@"tv":[self str:item[@"_kind"]]',ios)
         self.assertIn("liveCatalog=isBroadcastCatalog(manifest,catalog,manifestUrl)",java)
         self.assertIn('m.displayType=liveCatalog?"tv"',java)
         self.assertIn('if(!isChannel(m)&&m.name.toLowerCase(Locale.ROOT).contains(needle))',java)
