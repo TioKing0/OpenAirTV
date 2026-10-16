@@ -57,4 +57,16 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual({"Anime","Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
         self.assertEqual({"Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"}.difference(catalog.CATEGORY_OPTIONS),set())
 
+    def test_navigation_and_original_genres_are_preserved(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        android=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        ipad=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        for text in ('"Filmes","filmes"', '"Séries","series"', 'String[] genres={"Ação","Comédia","Drama","Suspense","Terror","Animação","Ficção científica","Documentário","Romance"}'):
+            self.assertIn(text,android)
+        for text in ('@"Início"', '@"Filmes"', '@"Séries"', '@"Minha lista"'):
+            self.assertIn(text,ipad)
+        for tag in ("Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"):
+            self.assertIn(tag,android)
+            self.assertIn(tag,ipad)
+
 if __name__=="__main__":unittest.main()

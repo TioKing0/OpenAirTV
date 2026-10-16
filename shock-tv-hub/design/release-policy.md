@@ -15,3 +15,7 @@ Os apps móveis Android/iOS de telefone **ainda não existem** e não podem ser 
 ## Manifesto de lote
 
 `shock-tv-hub/design/release.json` representa alvos e escopo. `telares-windows-play.yml`, `shock-tv-products.yml` e `shock-tv-legacy-ios.yml` devem ter gatilho para mudanças nesse manifesto. A equipe só promove uma versão à condição de final após testes de reprodução e compatibilidade reais, assinatura permanente, verificações de licença e conformidade de marca.
+
+## RC3: preservação obrigatória de categorias
+
+As novas categorias de plataformas e gêneros são **aditivas**. Início, Filmes, Séries, Buscar, Minha lista e todos os gêneros anteriores (Ação, Comédia, Drama, Suspense, Terror, Animação, Ficção científica, Documentário e Romance) permanecem. Também permanecem Anime, Netflix, Max/HBO e Disney+; adicionamos Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia e Ficção científica. Sem fonte declarada por addon, mostrar estado vazio, nunca inventar catálogo. A menção a plataformas não significa parceria, licença, assinatura, disponibilidade oficial no Brasil ou garantia de reprodução.

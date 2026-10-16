@@ -5,3 +5,7 @@ Aplicativo de streaming separado do Telares Install. Catálogos, busca, episódi
 ## Novas categorias V0.2.0 (candidata)
 
 Categorias Anime, Netflix, Max/HBO e Disney+ via metadados declarados dos addons. Gêneros Anime e catálogos Anime que anunciam gênero são consultados remotamente; títulos de plataforma só aparecem quando o addon identifica catálogo/provedor correspondente. Isso é classificação pelo addon, **não** confirmação da assinatura ou disponibilidade oficial no país. Catálogos inexistentes exibem vazio. A identificação oficial de provedores por país requer integrar uma fonte de disponibilidade autorizada, como TMDb (watch_region=BR e com atribuição JustWatch) com chave configurada.
+
+## Categorias RC3
+
+Os menus Filmes, Séries e todos os menus anteriores foram preservados. Categorias complementares: Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia, Ficção científica, junto de Anime, Netflix, Max/HBO e Disney+. Filtros de gênero usam declarações e metadados dos addons Stremio; categorias por plataforma usam identificação de origem declarada pelo addon. Os dados não atestam assinaturas, direitos de streaming ou disponibilidade regional.
