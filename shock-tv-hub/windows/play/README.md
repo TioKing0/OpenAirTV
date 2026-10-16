@@ -17,3 +17,7 @@ Seção Canais ao vivo na navegação desktop (mouse e teclado). O catálogo rec
 ## RC5
 
 Filtro Anime removido da navegação, sem apagar o gênero Animação e sem modificar a busca normal de filmes e séries. Outras categorias mantidas.
+
+## v0.2.4: novo guia para canais ao vivo
+
+Categorias à esquerda, lista de canais no meio, reprodução VLC embutida à direita. Filmes e Séries permanecem disponíveis e canais IPTV declarados tecnicamente `series` são exibidos exclusivamente no guia de canais. Fontes HLS/HTTP não verificadas por Range podem ser testadas pelo player com fallback. Isso não garante que fontes de terceiros estejam disponíveis.

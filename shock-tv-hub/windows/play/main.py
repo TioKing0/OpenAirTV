@@ -118,7 +118,7 @@ class TelaresPlay:
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
-        self.label(self.nav,"v0.2.3 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
+        self.label(self.nav,"v0.2.4 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
         self.right=tk.Frame(self.root,bg=BG)
         self.right.pack(side="left",fill="both",expand=True)
         bar=tk.Frame(self.right,bg=BG,height=78)
@@ -457,6 +457,10 @@ class TelaresPlay:
         self.show_detail(item)
 
     def start_title(self,item):
+        if not item:return
+        if self.playing:
+            self.playing=False
+            if self.video:self.video.close();self.video=None
         self.status_set("Localizando fontes HTTP/HLS compatíveis...")
         seq=self.req=self.req+1
         def done(source_list):

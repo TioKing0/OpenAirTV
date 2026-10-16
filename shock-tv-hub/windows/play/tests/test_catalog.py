@@ -137,4 +137,13 @@ class CatalogTest(unittest.TestCase):
         self.assertIn('m.displayType=liveCatalog?"tv"',java)
         self.assertIn('if(!isChannel(m)&&m.name.toLowerCase(Locale.ROOT).contains(needle))',java)
 
+    def test_live_guide_cross_platform(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        windows=(root/"windows/play/main.py").read_text(encoding="utf-8")
+        ipad=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        tv=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        for s in ("def render_live_guide","self.live_preview_frame.winfo_id()"):self.assertIn(s,windows)
+        for s in ("updateLiveGuide","liveGroups","liveChannels"):self.assertIn(s,ipad)
+        for s in ("buildLiveChannelGuide","liveGroupOf","isBroadcastCatalog"):self.assertIn(s,tv)
+
 if __name__=="__main__":unittest.main()

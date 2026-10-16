@@ -33,3 +33,7 @@ As seções Filmes, Séries, gêneros e filtros anteriores são preservadas. Can
 ## RC5 — simplificação solicitada
 
 A categoria **Anime** foi retirada dos filtros de TV, iPad e Windows Play por retornar vazia. O gênero **Animação** continua disponível, assim como Filmes, Séries e todos os outros gêneros. Não apagar listas pessoais, históricos ou títulos anteriormente armazenados; apenas remover o filtro inefetivo. A classificação futura pode ser reconsiderada somente se houver fontes de metadados que alimentem a categoria de forma comprovada.
+
+## RC6: evitar regressão de canais disfarçados de séries
+
+`type` guarda o **tipo do protocolo** Stremio; `displayType` no Android e `_kind` no iOS/Windows guardam a **categoria da interface**. Um canal Telecine publicado em catálogo de tipo `series` deve continuar sendo consultado em `/stream/series/...`, mas aparecer **somente** em Canais ao vivo. Detectar por tipo `tv/channel` e também por proveniência de catálogo declaradamente IPTV. Menus Séries, Filmes e resultados de busca VOD nunca aceitam canais. Manter testes automatizados de regressão e não inferir direito legal de reprodução. Transmissões ao vivo não possuem retomada VOD. iPad e Windows mostram prévia real pelo player; Android TV abre o player em tela cheia a partir do guia de três painéis (prévia de capa estática). O probe HTTP de 2 KB não confirma a decodificabilidade e não deve bloquear todas as tentativas de fonte ao vivo.

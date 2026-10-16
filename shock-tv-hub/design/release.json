@@ -1,31 +1,31 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-epg-seasons-rc5",
+  "batch": "telares-live-classification-rc6",
   "date": "2026-10-16",
-  "feature": "Canais ao vivo: guia 3 áreas, reprodução e estabilidade em correção; seleção por temporadas. Categoria Anime removida por solicitação do usuário, preservando Animação e todas as demais categorias.",
+  "feature": "Corrigir confusão entre canais ao vivo e séries Stremio; guia de canais com agrupamento e preview; melhorar fallback de HTTP/HLS sem alterar Filmes/Séries",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc5",
+      "version": "1.0.0-rc6",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.3"
+      "version": "0.2.4"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.3"
+      "version": "0.2.4"
     }
   ],
   "utilities": [
@@ -117,10 +117,11 @@
     "sourceAvailability": "Unverified on device; dependent on provider"
   },
   "notes": [
-    "O manifesto Tvvio declara tipo tv com canais agrupados.",
-    "DC Universe expõe catálogo de tipo personalizado, com condições de acesso do próprio addon.",
-    "Railway IPTV e PlavioHD não puderam ser inspecionados da rede do assistente; integração valida manifestos quando online.",
-    "Os filtros por plataforma são baseados em declarações dos addons, não dados oficiais de disponibilidade no Brasil.",
-    "Anime removido como filtro visível por não retornar catálogos; Animação permanece como gênero anterior."
+    "Tipo técnico Stremio preservado; categoria visual independente.",
+    "iPad: guia em três colunas e prévia AVPlayer.",
+    "Android TV: D-pad guia de categorias, canais, logo do canal e abrir player full screen.",
+    "Windows: três colunas e prévia VLC dentro do guia.",
+    "Fontes ao vivo não passam obrigatoriamente por teste de intervalo HTTP e tentam fallback.",
+    "Compatibilidade de canais externos depende de fonte, codecs e DRM."
   ]
 }
