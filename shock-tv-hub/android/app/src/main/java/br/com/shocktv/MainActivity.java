@@ -388,6 +388,33 @@ public final class MainActivity extends Activity {
         for(Media candidate:knownItems){if(!isChannel(candidate)){chosen=candidate;break;}}
         if(chosen==null)return;
         final Media featured=chosen;
+        if(BuildConfig.MOBILE_UI&&mobileWidthDp()<700){
+            LinearLayout hero=new LinearLayout(this);
+            hero.setOrientation(LinearLayout.HORIZONTAL);
+            hero.setGravity(Gravity.CENTER_VERTICAL);
+            hero.setPadding(dp(10),dp(9),dp(10),dp(9));
+            hero.setBackground(shape(0xff162b3a,0));
+            LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,dp(185));
+            hp.topMargin=dp(9);hp.bottomMargin=dp(16);
+            spotlightHolder.addView(hero,hp);
+            ImageView cover=new ImageView(this);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setBackgroundColor(0xff203849);
+            hero.addView(cover,new LinearLayout.LayoutParams(dp(104),-1));
+            if(featured.poster!=null&&featured.poster.startsWith("https://"))loadPoster(featured.poster,cover);
+            LinearLayout copy=new LinearLayout(this);
+            copy.setPadding(dp(12),dp(3),dp(2),dp(3));
+            copy.setOrientation(LinearLayout.VERTICAL);copy.setGravity(Gravity.CENTER_VERTICAL);
+            hero.addView(copy,new LinearLayout.LayoutParams(0,-1,1f));
+            copy.addView(text("EM DESTAQUE",10,AQUA,true));
+            TextView name=text(featured.name,20,Color.WHITE,true);
+            name.setMaxLines(2);copy.addView(name);
+            TextView summary=text(featured.description==null?"":featured.description,12,0xffb6cbd8,false);
+            summary.setMaxLines(2);copy.addView(summary);
+            Button open=button("Ver detalhes",()->details(featured));
+            open.setTextSize(12);copy.addView(open,new LinearLayout.LayoutParams(-1,dp(48)));
+            return;
+        }
         LinearLayout hero=new LinearLayout(this);
         hero.setOrientation(LinearLayout.HORIZONTAL);
         hero.setGravity(Gravity.CENTER_VERTICAL);
@@ -701,6 +728,7 @@ public final class MainActivity extends Activity {
         return "Outros canais";
     }
     private void buildLiveChannelGuide(){
+        if(BuildConfig.MOBILE_UI&&mobileWidthDp()<840){buildMobileLiveGuide();return;}
         ArrayList<Media> channels=matching(this::isChannel);
         if(channels.isEmpty()){
             catalogArea.addView(text("Aguardando catálogos de TV. Consulte os addons em Fontes.",17,0xffb1c8d5,false));
@@ -781,6 +809,67 @@ public final class MainActivity extends Activity {
         }
     }
 
+
+    private void buildMobileLiveGuide(){
+        ArrayList<Media> channels=matching(this::isChannel);
+        if(channels.isEmpty()){
+            catalogArea.addView(text("Aguardando canais ao vivo dos addons conectados.",15,0xffb1c8d5,false));
+            return;
+        }
+        java.util.Collections.sort(channels,(a,b)->a.name.compareToIgnoreCase(b.name));
+        ArrayList<String> groups=new ArrayList<>();groups.add("Todos os canais");
+        for(Media m:channels){String g=liveGroupOf(m);if(!groups.contains(g))groups.add(g);}
+        if(!groups.contains(liveGroupFilter))liveGroupFilter="Todos os canais";
+        HorizontalScrollView groupScroller=new HorizontalScrollView(this);
+        groupScroller.setHorizontalScrollBarEnabled(false);
+        LinearLayout chips=new LinearLayout(this);chips.setPadding(dp(2),dp(7),dp(8),dp(8));
+        for(String group:groups){
+            Button chip=button((group.equals(liveGroupFilter)?"● ":"")+group,()->{
+                liveGroupFilter=group;liveSelectedChannel=null;refreshCatalogRows();
+            });
+            chip.setMinHeight(dp(48));chip.setTextSize(12);chips.addView(chip);
+        }
+        groupScroller.addView(chips);
+        catalogArea.addView(groupScroller,new LinearLayout.LayoutParams(-1,dp(65)));
+        ArrayList<Media> subset=new ArrayList<>();
+        for(Media m:channels)if("Todos os canais".equals(liveGroupFilter)||
+            liveGroupOf(m).equals(liveGroupFilter))subset.add(m);
+        if(liveSelectedChannel==null||!subset.contains(liveSelectedChannel))
+            liveSelectedChannel=subset.isEmpty()?null:subset.get(0);
+        if(liveSelectedChannel!=null){
+            final Media selected=liveSelectedChannel;
+            LinearLayout preview=new LinearLayout(this);
+            preview.setOrientation(LinearLayout.HORIZONTAL);
+            preview.setPadding(dp(10),dp(12),dp(10),dp(12));
+            preview.setBackground(shape(PANEL,0xff315b70));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(156));
+            lp.bottomMargin=dp(16);catalogArea.addView(preview,lp);
+            ImageView logo=new ImageView(this);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            logo.setBackgroundColor(BG);preview.addView(logo,new LinearLayout.LayoutParams(dp(93),-1));
+            if(selected.poster!=null&&selected.poster.startsWith("https://"))loadPoster(selected.poster,logo);
+            LinearLayout stack=new LinearLayout(this);stack.setOrientation(LinearLayout.VERTICAL);
+            stack.setPadding(dp(12),0,0,0);
+            preview.addView(stack,new LinearLayout.LayoutParams(0,-1,1f));
+            stack.addView(text("AO VIVO • "+liveGroupOf(selected),10,AQUA,true));
+            TextView title=text(selected.name,19,Color.WHITE,true);title.setMaxLines(2);stack.addView(title);
+            Button watch=button("▶ Assistir",()->resolveItem(selected));watch.setTextSize(12);
+            stack.addView(watch,new LinearLayout.LayoutParams(-1,dp(48)));
+        }
+        catalogArea.addView(text("CANAIS • "+subset.size(),16,AQUA,true));
+        int count=0;
+        for(Media m:subset){
+            if(++count>150)break;
+            Button channel=button((m==liveSelectedChannel?"● ":"○ ")+m.name,()->{
+                liveSelectedChannel=m;refreshCatalogRows();
+            });
+            channel.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            channel.setTextSize(13);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(54));
+            lp.bottomMargin=dp(5);catalogArea.addView(channel,lp);
+        }
+        if(subset.size()>150)catalogArea.addView(text("Mostrando 150 canais. Selecione uma categoria para refinar.",12,0xffa9c9d7,false));
+    }
+
     private void addCatalog(String header,ArrayList<Media> media){
         LinearLayout block=new LinearLayout(this);
         block.setOrientation(LinearLayout.VERTICAL);
@@ -797,12 +886,14 @@ public final class MainActivity extends Activity {
             LinearLayout card=new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);card.setFocusable(true);
             card.setBackground(shape(0xff152537,0));
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(156),dp(257));
+            int cardWidth=BuildConfig.MOBILE_UI?Math.max(128,Math.min(176,(mobileWidthDp()-46)/2)):156;
+            int posterHeight=BuildConfig.MOBILE_UI?(int)(cardWidth*1.35f):218;
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(cardWidth),dp(posterHeight+39));
             cp.rightMargin=dp(15);items.addView(card,cp);
             ImageView poster=new ImageView(this);
             poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
             poster.setBackgroundColor(0xff263647);
-            card.addView(poster,new LinearLayout.LayoutParams(-1,dp(218)));
+            card.addView(poster,new LinearLayout.LayoutParams(-1,dp(posterHeight)));
             TextView label=text(m.name,13,0xffe9f3fa,true);label.setMaxLines(2);
             label.setPadding(dp(7),dp(7),dp(7),0);
             card.addView(label,new LinearLayout.LayoutParams(-1,dp(37)));
@@ -816,7 +907,9 @@ public final class MainActivity extends Activity {
             if(m.poster!=null&&m.poster.startsWith("https://"))loadPoster(m.poster,poster);
         }
         row.addView(items);
-        block.addView(row,new LinearLayout.LayoutParams(-1,dp(278)));
+        int rowHeight=BuildConfig.MOBILE_UI?
+            (int)(Math.max(128,Math.min(176,(mobileWidthDp()-46)/2))*1.35f)+59:278;
+        block.addView(row,new LinearLayout.LayoutParams(-1,dp(rowHeight)));
     }
     /** Sample poster bitmaps at TV-card resolution. Keep a small cache to avoid OOM on low-memory TVs. */
     private void loadPoster(String url,ImageView image){
@@ -880,25 +973,27 @@ public final class MainActivity extends Activity {
         page.setFillViewport(true);
         LinearLayout outer=new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setPadding(dp(40),dp(23),dp(40),dp(45));
+        boolean mobileCompact=BuildConfig.MOBILE_UI&&mobileWidthDp()<700;
+        outer.setPadding(dp(mobileCompact?16:40),dp(23),dp(mobileCompact?16:40),dp(45));
         page.addView(outer);
         Button back=button("←  Voltar",()->returnToBrowse());
         outer.addView(back);
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);
+        row.setOrientation(mobileCompact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);
         rowParams.topMargin=dp(26);outer.addView(row,rowParams);
 
         ImageView artworkView=new ImageView(this);
         artworkView.setScaleType(ImageView.ScaleType.CENTER_CROP);
         artworkView.setBackground(shape(0xff213748,0));
-        row.addView(artworkView,new LinearLayout.LayoutParams(dp(238),dp(351)));
+        row.addView(artworkView,new LinearLayout.LayoutParams(dp(mobileCompact?154:238),dp(mobileCompact?225:351)));
         if(m.poster!=null&&m.poster.startsWith("https://"))loadPoster(m.poster,artworkView);
 
         LinearLayout right=new LinearLayout(this);right.setOrientation(LinearLayout.VERTICAL);
-        right.setPadding(dp(36),0,dp(5),0);
-        row.addView(right,new LinearLayout.LayoutParams(0,-2,1f));
+        right.setPadding(dp(mobileCompact?0:36),dp(mobileCompact?15:0),dp(5),0);
+        row.addView(right,mobileCompact?new LinearLayout.LayoutParams(-1,-2):new LinearLayout.LayoutParams(0,-2,1f));
         right.addView(text((isSeries(m)?"SÉRIE":isFilm(m)?"FILME":"AO VIVO")+"  ·  TELARES TV",12,AQUA,true));
-        TextView title=text(m.name,36,Color.WHITE,true);title.setMaxLines(3);
+        TextView title=text(m.name,mobileCompact?25:36,Color.WHITE,true);title.setMaxLines(3);
         LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.topMargin=dp(9);right.addView(title,tp);
         if(m.genre!=null&&!m.genre.isEmpty()){
             TextView genres=text(m.genre.replace(",", "  •  "),13,0xff90bbca,false);
@@ -911,7 +1006,7 @@ public final class MainActivity extends Activity {
         right.addView(desc,dp2);
 
         LinearLayout primary=new LinearLayout(this);
-        primary.setOrientation(LinearLayout.HORIZONTAL);
+        primary.setOrientation(mobileCompact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams actions=new LinearLayout.LayoutParams(-1,-2);actions.topMargin=dp(24);
         right.addView(primary,actions);
         primary.addView(button(entry.canContinue()&&entry.streamUrl!=null&&!entry.streamUrl.isEmpty()?
@@ -927,7 +1022,7 @@ public final class MainActivity extends Activity {
             }));
 
         LinearLayout secondary=new LinearLayout(this);
-        secondary.setOrientation(LinearLayout.HORIZONTAL);
+        secondary.setOrientation(mobileCompact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams actions2=new LinearLayout.LayoutParams(-1,-2);actions2.topMargin=dp(11);
         right.addView(secondary,actions2);
         Button later=button(entry.watchLater?"✓  Na minha lista":"＋  Assistir mais tarde",()->{
@@ -1816,7 +1911,7 @@ public final class MainActivity extends Activity {
         if(verifiedOptions!=null)intent.putExtra("verifiedStreamOptions",verifiedOptions);
         startActivity(intent);
     }
-    private void message(String text){new AlertDialog.Builder(this).setTitle("Telares TV").setMessage(text).setPositiveButton("OK",null).show();}
+    private void message(String text){new AlertDialog.Builder(this).setTitle(BuildConfig.MOBILE_UI?"Telares Play":"Telares TV").setMessage(text).setPositiveButton("OK",null).show();}
     private static final class Media{String id="",type="",displayType="",name="",poster="",description="",source="",episodeId="",origin="",catalogId="",genre="";}
     private JSONObject getJson(String url) throws Exception{
         if(!url.startsWith("https://"))throw new IOException("Este addon exige conexão HTTPS.");
