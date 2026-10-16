@@ -468,8 +468,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                         NSDictionary *media=[self mediaFrom:raw type:kind base:base];
                         if(media){
                             NSMutableDictionary *display=[media mutableCopy];
-                            if(live)display[@"_kind"]=@"tv";
-                            else if(custom)display[@"_kind"]=[[self str:cat[@"id"]].lowercaseString containsString:@"series"]?@"series":@"movie";
+                            if(live){display[@"_kind"]=@"tv";display[@"type"]=kind;}
+                            else if(custom){
+                                display[@"type"]=kind; // Use manifest type for /stream and /meta URLs.
+                                display[@"_kind"]=[[self str:cat[@"id"]].lowercaseString containsString:@"series"]?@"series":@"movie";
+                            }
                             [items addObject:display];
                         }
                         if(items.count>=35)break;
@@ -681,7 +684,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                         NSDictionary *media = [self mediaFrom:raw type:type base:base];
                         if(media){
                             NSMutableDictionary *entry=[media mutableCopy];
-                            if(!native)entry[@"_kind"]=seriesCustom?@"series":@"movie";
+                            if(!native){entry[@"type"]=type;entry[@"_kind"]=seriesCustom?@"series":@"movie";}
                             [found addObject:entry];
                         }
                         if(found.count >= 28)break;
