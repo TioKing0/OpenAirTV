@@ -1464,16 +1464,6 @@ public final class MainActivity extends Activity {
             }
             final JSONArray result=episodes;
             final int countCompatible=compatible,failed=errors,empty=withoutEpisodes;
-            if(isChannel(media)){
-                // Live HLS endpoints frequently reject short-range probes while ExoPlayer
-                // can load their playlists. Append bounded direct candidates as fallbacks.
-                Set<String> verifiedUrls=new HashSet<>();
-                for(StreamProbe.Option o:checked.available)verifiedUrls.add(o.url);
-                for(StreamProbe.Option candidate:candidates){
-                    if(checked.available.size()>=24)break;
-                    if(verifiedUrls.add(candidate.url))checked.available.add(candidate);
-                }
-            }
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
@@ -1628,6 +1618,16 @@ public final class MainActivity extends Activity {
                         +(!preferredLanguage.isEmpty()&&preferredLanguage.equals(right.language)?50:0);
                     return Integer.compare(rightScore,leftScore);
                 });
+            }
+            if(isChannel(media)){
+                // Live HLS endpoints frequently reject short-range probes while ExoPlayer
+                // can load their playlists. Append bounded direct candidates as fallbacks.
+                Set<String> verifiedUrls=new HashSet<>();
+                for(StreamProbe.Option o:checked.available)verifiedUrls.add(o.url);
+                for(StreamProbe.Option candidate:candidates){
+                    if(checked.available.size()>=24)break;
+                    if(verifiedUrls.add(candidate.url))checked.available.add(candidate);
+                }
             }
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
