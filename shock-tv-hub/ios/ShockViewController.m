@@ -116,6 +116,18 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,assign) BOOL closingPlayer;
 @property(nonatomic,assign) double seekAfterReady;
 @property(nonatomic,assign) double lastPlaybackPosition;
+@property(nonatomic,strong) UIView *liveGuide;
+@property(nonatomic,strong) UITableView *liveGroups;
+@property(nonatomic,strong) UITableView *liveChannels;
+@property(nonatomic,strong) UIView *liveScreen;
+@property(nonatomic,strong) UILabel *liveTitle;
+@property(nonatomic,strong) UILabel *liveMessage;
+@property(nonatomic,strong) UIButton *liveFullscreen;
+@property(nonatomic,copy) NSString *liveGroup;
+@property(nonatomic,strong) NSArray *liveGroupNames;
+@property(nonatomic,strong) NSArray *liveFiltered;
+@property(nonatomic,strong) NSDictionary *liveSelection;
+@property(nonatomic,strong) AVPlayerViewController *liveFullscreenController;
 @end
 
 @implementation ShockViewController
@@ -256,6 +268,46 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.table.tableFooterView=[[UIView alloc]initWithFrame:CGRectZero];
     [self.view addSubview:self.table];
 
+
+    // Three-pane channel guide exists only on Ao vivo, never in movie/series screens.
+    self.liveGuide=[[UIView alloc]initWithFrame:CGRectZero];
+    self.liveGuide.backgroundColor=[self dark];self.liveGuide.hidden=YES;
+    [self.view addSubview:self.liveGuide];
+    self.liveGroups=[[UITableView alloc]initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.liveChannels=[[UITableView alloc]initWithFrame:CGRectZero style:UITableViewStylePlain];
+    for(UITableView *list in @[self.liveGroups,self.liveChannels]){
+        list.delegate=self;list.dataSource=self;list.rowHeight=61;
+        list.backgroundColor=[UIColor colorWithRed:.08 green:.15 blue:.22 alpha:1];
+        list.separatorColor=[UIColor colorWithWhite:.22 alpha:1];
+        list.tableFooterView=[[UIView alloc]initWithFrame:CGRectZero];
+        list.layer.cornerRadius=10;
+        [self.liveGuide addSubview:list];
+    }
+    self.liveScreen=[[UIView alloc]initWithFrame:CGRectZero];
+    self.liveScreen.backgroundColor=[UIColor blackColor];
+    self.liveScreen.layer.cornerRadius=10;self.liveScreen.clipsToBounds=YES;
+    [self.liveGuide addSubview:self.liveScreen];
+    self.liveTitle=[[UILabel alloc]initWithFrame:CGRectZero];
+    self.liveTitle.font=[UIFont boldSystemFontOfSize:16];
+    self.liveTitle.textColor=[self accent];
+    self.liveTitle.text=@"AO VIVO · PRÉVIA";self.liveTitle.numberOfLines=2;
+    [self.liveGuide addSubview:self.liveTitle];
+    self.liveMessage=[[UILabel alloc]initWithFrame:CGRectZero];
+    self.liveMessage.text=@"Selecione uma categoria e depois um canal.";
+    self.liveMessage.textColor=[UIColor colorWithWhite:.80 alpha:1];
+    self.liveMessage.font=[UIFont systemFontOfSize:14];
+    self.liveMessage.numberOfLines=4;
+    [self.liveGuide addSubview:self.liveMessage];
+    self.liveFullscreen=[UIButton buttonWithType:UIButtonTypeCustom];
+    [self.liveFullscreen setTitle:@"Tela cheia" forState:UIControlStateNormal];
+    self.liveFullscreen.titleLabel.font=[UIFont boldSystemFontOfSize:15];
+    self.liveFullscreen.backgroundColor=[UIColor colorWithRed:.12 green:.36 blue:.46 alpha:1];
+    self.liveFullscreen.layer.cornerRadius=9;
+    [self.liveFullscreen addTarget:self action:@selector(openLiveFullscreen)
+       forControlEvents:UIControlEventTouchUpInside];
+    self.liveFullscreen.hidden=YES;
+    [self.liveGuide addSubview:self.liveFullscreen];
+    self.liveGroupNames=@[@"Todos os canais"];self.liveFiltered=@[];
     self.status=[[UILabel alloc]initWithFrame:CGRectZero];
     self.status.font=[UIFont systemFontOfSize:13];
     self.status.textColor=[UIColor colorWithWhite:.73 alpha:1];
@@ -295,12 +347,104 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     CGFloat bottom=height-39;
     CGRect body=CGRectMake(0,offset,width,MAX(80,bottom-offset));
+    BOOL live=[self showingLiveGuide];
     self.posterGrid.frame=body;
     self.table.frame=body;
     self.table.hidden=!isSpecial;
-    self.posterGrid.hidden=isSpecial;
+    self.posterGrid.hidden=isSpecial||live;
+    self.liveGuide.hidden=!live;
+    if(live){
+        self.liveGuide.frame=CGRectMake(margin,offset,width-2*margin,MAX(80,bottom-offset));
+        CGFloat w=self.liveGuide.bounds.size.width,h=self.liveGuide.bounds.size.height,gap=10;
+        CGFloat left=landscape?MIN(185,w*.22):MIN(140,w*.22);
+        CGFloat mid=landscape?MIN(280,w*.31):MIN(186,w*.31);
+        CGFloat previewX=left+mid+gap*2,previewW=MAX(110,w-previewX);
+        self.liveGroups.frame=CGRectMake(0,0,left,h);
+        self.liveChannels.frame=CGRectMake(left+gap,0,mid,h);
+        self.liveTitle.frame=CGRectMake(previewX+5,2,previewW-10,44);
+        CGFloat screenH=MAX(100,MIN(previewW*9.0/16.0,h*.49));
+        self.liveScreen.frame=CGRectMake(previewX,52,previewW,screenH);
+        if(self.playerController.parentViewController==self)
+            self.playerController.view.frame=self.liveScreen.bounds;
+        self.liveMessage.frame=CGRectMake(previewX+5,screenH+64,previewW-10,83);
+        self.liveFullscreen.frame=CGRectMake(previewX+5,screenH+150,MIN(166,previewW-10),43);
+    }
     self.status.frame=CGRectMake(margin,height-37,width-margin*2,26);
     [self.posterGrid.collectionViewLayout invalidateLayout];
+}
+
+- (BOOL)showingLiveGuide {
+    return [self.mode isEqualToString:@"catalog"]&&!self.searching&&
+           [self.filter isEqualToString:@"Ao vivo"];
+}
+- (NSString *)liveGroupOf:(NSDictionary *)item {
+    NSString *title=[self normalizedCategory:[self str:item[@"name"]]];
+    NSString *origin=[self normalizedCategory:[self str:item[@"_group"]]];
+    if([title containsString:@"telecine"])return @"Telecine";
+    if([title containsString:@"hbo"]||[title containsString:@"cinemax"])return @"HBO / Max";
+    if([title containsString:@"sportv"]||[title containsString:@"espn"]||
+       [title containsString:@"premiere"]||[title containsString:@"tnt sports"]||
+       [origin containsString:@"esporte"])return @"Esportes";
+    if([origin containsString:@"aberto"]||[title containsString:@"globo"]||
+       [title containsString:@"record"]||[title containsString:@"sbt"]||
+       [title containsString:@"rede tv"]||[title containsString:@"tv cultura"])
+        return @"Canais abertos";
+    if([origin containsString:@"noticia"]||[title containsString:@"news"]||
+       [title containsString:@"cnn"])return @"Notícias";
+    if([origin containsString:@"infantil"]||[title containsString:@"cartoon"])return @"Infantil";
+    if([origin containsString:@"religioso"])return @"Religiosos";
+    if([origin containsString:@"filmes"]||[origin containsString:@"series"])return @"Filmes e séries";
+    if([origin containsString:@"entretenimento"])return @"Entretenimento";
+    return @"Outros canais";
+}
+- (void)updateLiveGuide {
+    if(![self showingLiveGuide])return;
+    NSMutableArray *groups=[NSMutableArray arrayWithObject:@"Todos os canais"];
+    for(NSDictionary *item in self.results){
+        NSString *group=[self liveGroupOf:item];
+        if(![groups containsObject:group])[groups addObject:group];
+    }
+    self.liveGroupNames=groups;
+    if(!self.liveGroup||![groups containsObject:self.liveGroup])self.liveGroup=@"Todos os canais";
+    NSMutableArray *filtered=[NSMutableArray array];
+    for(NSDictionary *item in self.results)
+        if([self.liveGroup isEqualToString:@"Todos os canais"]||
+           [[self liveGroupOf:item] isEqualToString:self.liveGroup])
+            [filtered addObject:item];
+    self.liveFiltered=filtered;
+    [self.liveGroups reloadData];[self.liveChannels reloadData];
+    self.status.text=[NSString stringWithFormat:@"%lu canais ao vivo · %@",
+        (unsigned long)self.results.count,self.liveGroup];
+}
+- (void)stopLivePreview {
+    self.streamRequestGeneration++;
+    [self.streamChecker cancel];self.streamChecker=nil;
+    [self cleanCurrentPlayer];
+    if(self.playerController.parentViewController==self){
+        [self.playerController willMoveToParentViewController:nil];
+        [self.playerController.view removeFromSuperview];
+        [self.playerController removeFromParentViewController];
+    }
+    self.playerController=nil;self.workingStreams=nil;self.activePlayback=nil;
+    self.liveSelection=nil;self.liveFullscreen.hidden=YES;
+    self.liveMessage.text=@"Selecione um canal para iniciar a prévia.";
+}
+- (void)openLiveFullscreen {
+    if(!self.moviePlayer||self.presentedViewController)return;
+    AVPlayerViewController *full=[[AVPlayerViewController alloc]init];
+    full.player=self.moviePlayer;full.showsPlaybackControls=YES;
+    self.liveFullscreenController=full;
+    [self presentViewController:full animated:YES completion:nil];
+}
+- (void)playLiveSelection:(NSDictionary *)item {
+    if(!item)return;
+    [self.streamChecker cancel];
+    if(self.moviePlayer)[self cleanCurrentPlayer];
+    self.liveSelection=item;
+    self.liveTitle.text=[NSString stringWithFormat:@"AO VIVO · %@",[self str:item[@"name"]]];
+    self.liveMessage.text=@"Procurando transmissão...";
+    self.liveFullscreen.hidden=YES;
+    [self resolveStreams:item];
 }
 - (void)setSelectedTab {
     NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"];
@@ -321,6 +465,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"];
     NSInteger idx=button.tag-100;
     if(idx<0||idx>=names.count)return;
+    if([self showingLiveGuide]&&idx!=5)[self stopLivePreview];
     if(idx==4){[self showCategoryChooser:button];return;}
     if(idx==5){
         self.searching=NO;self.search.hidden=YES;[self.search resignFirstResponder];
