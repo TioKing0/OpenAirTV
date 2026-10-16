@@ -4,7 +4,7 @@
  <key>CFBundleIdentifier</key><string>br.com.shocktv.legacy</string>
  <key>CFBundleExecutable</key><string>ShockTV</string>
  <key>CFBundleDisplayName</key><string>Telares Play</string>
- <key>CFBundleName</key><string>ShockTV</string>
+ <key>CFBundleName</key><string>TelaresPlay</string>
  <key>CFBundlePackageType</key><string>APPL</string>
  <key>CFBundleVersion</key><string>7</string>
  <key>CFBundleShortVersionString</key><string>0.3.3</string>

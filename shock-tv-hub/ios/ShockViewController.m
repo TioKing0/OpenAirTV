@@ -579,7 +579,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (void)requestJSON:(NSString *)endpoint complete:(void (^)(NSDictionary *, NSError *))finish {
     NSURL *url = [NSURL URLWithString:endpoint];
     if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
-        finish(nil,[NSError errorWithDomain:@"ShockTV" code:-1
+        finish(nil,[NSError errorWithDomain:@"Telares.Play" code:-1
             userInfo:@{NSLocalizedDescriptionKey:@"O addon precisa utilizar HTTPS."}]);
         return;
     }
@@ -591,10 +591,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             NSHTTPURLResponse *http = [response isKindOfClass:[NSHTTPURLResponse class]] ?
                 (NSHTTPURLResponse *)response : nil;
             if (!error && (http.statusCode < 200 || http.statusCode >= 300))
-                error = [NSError errorWithDomain:@"ShockTV.HTTP" code:http.statusCode
+                error = [NSError errorWithDomain:@"Telares.Play.HTTP" code:http.statusCode
                     userInfo:@{NSLocalizedDescriptionKey:@"O servidor não respondeu com sucesso."}];
             if (!error && (data.length == 0 || data.length > 2000000))
-                error = [NSError errorWithDomain:@"ShockTV.JSON" code:1
+                error = [NSError errorWithDomain:@"Telares.Play.JSON" code:1
                     userInfo:@{NSLocalizedDescriptionKey:@"Resposta vazia ou grande demais."}];
             NSDictionary *json = nil;
             if (!error) {
@@ -853,7 +853,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)notice:(NSString *)message {
-    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Shock TV" message:message
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Telares Play" message:message
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -1083,10 +1083,17 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(self.currentTerm.length>=2)[self beginSearch];
     else [self loadCatalogs];
 }
+- (BOOL)isLiveItem:(NSDictionary *)item {
+    NSString *kind=[self str:item[@"_kind"]];
+    NSString *type=[self str:item[@"type"]];
+    return [kind isEqualToString:@"tv"]||[type isEqualToString:@"tv"]||
+           [type isEqualToString:@"channel"];
+}
 - (void)chooseAutomaticallyFrom:(NSArray *)candidates item:(NSDictionary *)item {
     NSUInteger generation=self.streamRequestGeneration;
-    self.status.text=[NSString stringWithFormat:@"Verificando até %lu fontes...",
-        (unsigned long)MIN(candidates.count,16)];
+    BOOL live=[self isLiveItem:item];
+    self.status.text=[NSString stringWithFormat:@"Analisando %lu fonte(s) %@...",
+        (unsigned long)MIN(candidates.count,16),live?@"ao vivo":@"de vídeo"];
     ShockStreamChecker *checker=[[ShockStreamChecker alloc]init];
     self.streamChecker=checker;
     __weak ShockViewController *weakSelf=self;
@@ -1094,21 +1101,36 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         ShockViewController *strong=weakSelf;
         if(!strong||generation!=strong.streamRequestGeneration)return;
         strong.streamChecker=nil;
-        if(!available.count){
+        NSMutableArray *order=[available mutableCopy];
+        if(live){
+            // Live HLS endpoints often reject Range requests or return MIME types
+            // not recognized by a 2KB probe. Probe failure is not decoder failure.
+            // Give the native AVPlayer its own bounded chance, verified URLs first.
+            for(NSDictionary *candidate in [candidates subarrayWithRange:
+                    NSMakeRange(0,MIN(candidates.count,16))]){
+                BOOL present=NO;
+                for(NSDictionary *tested in order)
+                    if([[strong str:tested[@"_url"]] isEqualToString:
+                            [strong str:candidate[@"_url"]]]){present=YES;break;}
+                if(!present)[order addObject:candidate];
+            }
+        }
+        if(!order.count){
             strong.status.text=@"Nenhuma fonte compatível respondeu corretamente.";
             [strong notice:[NSString stringWithFormat:
-                @"As %lu fontes verificadas não ofereceram mídia HTTP/HLS válida. Tente outro título ou addon.",
+                @"Nenhuma das %lu fontes verificadas ofereceu uma resposta de mídia válida.",
                 (unsigned long)checked]];
             return;
         }
-        strong.workingStreams=available;
+        strong.workingStreams=order;
         strong.selectedMedia=item;
         strong.playingSourceIndex=0;
         strong.lastPlaybackPosition=0;
         strong.closingPlayer=NO;
-        strong.status.text=[NSString stringWithFormat:@"%lu fonte(s) preliminarmente disponíveis",
-            (unsigned long)available.count];
-        [strong playStream:available[0]];
+        strong.status.text=[NSString stringWithFormat:
+            @"Tentando fonte %lu de %lu%@",(unsigned long)1,(unsigned long)order.count,
+            live?@" • transmissão ao vivo":@""];
+        [strong playStream:order[0]];
     }];
 }
 - (void)cleanCurrentPlayer {
@@ -1134,7 +1156,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.activePlayback=[item mutableCopy];
     self.playbackStarted=NO;
     BOOL live=[[self str:item[@"_kind"]] isEqualToString:@"tv"]||
-        [[self str:item[@"type"]] isEqualToString:@"tv"];
+        [[self str:item[@"type"]] isEqualToString:@"tv"]||
+        [[self str:item[@"type"]] isEqualToString:@"channel"];
     self.seekAfterReady=live?0:self.lastPlaybackPosition;
     if(!live&&self.seekAfterReady<=0){
         NSString *entryKey=[self keyFor:item];
@@ -1150,6 +1173,19 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         context:kShockPlayerItemStatusContext];
     self.hasPlayerObservation=YES;
     self.moviePlayer=[AVPlayer playerWithPlayerItem:playerItem];
+    if(live){
+        // HLS often needs extra startup time on Apple A5 devices.
+        // Still recover from a source that never reaches ReadyToPlay.
+        AVPlayerItem *expected=playerItem;
+        __weak ShockViewController *weakSelf=self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(17*NSEC_PER_SEC)),
+            dispatch_get_main_queue(),^{
+                ShockViewController *strong=weakSelf;
+                if(!strong||strong.closingPlayer||strong.observedPlayerItem!=expected)return;
+                if(expected.status!=AVPlayerItemStatusReadyToPlay)
+                    [strong tryNextPlaybackSource];
+            });
+    }
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemFailed:)
         name:AVPlayerItemFailedToPlayToEndTimeNotification object:playerItem];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemStalled:)
@@ -1274,7 +1310,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)saveCurrentPosition {
     if(!self.playbackStarted||!self.moviePlayer||!self.activePlayback)return;
-    if([[self str:self.activePlayback[@"_kind"]] isEqualToString:@"tv"])return;
+    if([self isLiveItem:self.activePlayback])return;
     Float64 current=CMTimeGetSeconds(self.moviePlayer.currentTime);
     if(isfinite(current)&&current>0){
         self.lastPlaybackPosition=current;
@@ -1298,8 +1334,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)recordProgress:(double)seconds {
     if(!self.activePlayback)return;
-    if([[self str:self.activePlayback[@"_kind"]] isEqualToString:@"tv"]||
-       [[self str:self.activePlayback[@"type"]] isEqualToString:@"tv"])return;
+    if([self isLiveItem:self.activePlayback])return;
     NSMutableDictionary *item=[self.activePlayback mutableCopy];
     item[@"position"]=@(seconds);
     item[@"watched"]=@YES;
