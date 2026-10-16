@@ -1,31 +1,31 @@
 {
   "brand": "TELARES",
-  "batch": "telares-categories-rc2",
+  "batch": "telares-categories-rc3",
   "date": "2026-10-16",
-  "feature": "Categorias Anime, Netflix, Max/HBO e Disney+; dados declarados pelos addons Stremio, sem afirmar direitos de streaming",
+  "feature": "Categorias adicionais Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia e Ficção científica; preservadas Filmes, Séries, gêneros anteriores, Anime, Netflix, Max/HBO, Disney+",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc2",
+      "version": "1.0.0-rc3",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   ],
   "utilities": [
@@ -65,5 +65,39 @@
     "Deliver only verified CI artifacts, include signed/test warnings",
     "Genre/catalog classification from addons is not certified subscription availability",
     "Real provider discovery by region requires a licensed source and attribution"
-  ]
+  ],
+  "categoryGroups": {
+    "navigation": [
+      "Início",
+      "Filmes",
+      "Séries",
+      "Buscar",
+      "Minha lista"
+    ],
+    "previousGenres": [
+      "Ação",
+      "Comédia",
+      "Drama",
+      "Suspense",
+      "Terror",
+      "Animação",
+      "Ficção científica",
+      "Documentário",
+      "Romance"
+    ],
+    "extra": [
+      "Anime",
+      "Netflix",
+      "Max / HBO",
+      "Disney+",
+      "Prime Video",
+      "Apple TV+",
+      "Paramount+",
+      "Crunchyroll",
+      "Documentários",
+      "Terror",
+      "Comédia",
+      "Ficção científica"
+    ]
+  }
 }
