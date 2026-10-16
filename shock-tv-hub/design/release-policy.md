@@ -29,3 +29,7 @@ Manifests adicionados (sem redefinir personalizações):
 - https://h-gate.site/dc/manifest.json
 
 As seções Filmes, Séries, gêneros e filtros anteriores são preservadas. Canais ao vivo usa catálogos Stremio de tipo `tv` / `channel` e seleção automática de mídias HTTP/HLS; transmissões ao vivo não usam retomada/seek por tempo gravado. Addons com tipo personalizado (ex. DC Universe) precisam manter seu tipo original para requests `/meta` e `/stream`. Os filtros de plataforma retornam somente fontes identificadas pelos addons. Não inventar títulos onde não há catálogo. O pacote de IPTV Railway e PlavioHD depende de verificação da disponibilidade dos manifests no aparelho; Tvvio anuncia type tv. Uma compilação aprovada não confirma sinal de canal nem autorização de retransmissão.
+
+## RC5 — simplificação solicitada
+
+A categoria **Anime** foi retirada dos filtros de TV, iPad e Windows Play por retornar vazia. O gênero **Animação** continua disponível, assim como Filmes, Séries e todos os outros gêneros. Não apagar listas pessoais, históricos ou títulos anteriormente armazenados; apenas remover o filtro inefetivo. A classificação futura pode ser reconsiderada somente se houver fontes de metadados que alimentem a categoria de forma comprovada.

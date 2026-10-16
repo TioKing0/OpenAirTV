@@ -899,7 +899,7 @@ public final class MainActivity extends Activity {
     private void buildCategoryPage(){
         TextView intro=text("Explore catálogos identificados pelos addons. Plataformas não confirmam disponibilidade oficial nem reprodução.",14,0xffa9c6d5,false);
         catalogArea.addView(intro);
-        String[] tags={"Canais ao vivo","Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"};
+        String[] tags={"Canais ao vivo","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"};
         LinearLayout options=new LinearLayout(this);
         options.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
@@ -927,7 +927,6 @@ public final class MainActivity extends Activity {
         return form.replaceAll("\\p{M}+","").toLowerCase(Locale.ROOT).replace('-',' ').replace('_',' ');
     }
     private String[] categoryAliases(String category){
-        if("Anime".equals(category))return new String[]{"anime","japanese animation","animacao japonesa"};
         if("Documentários".equals(category))return new String[]{"documentario","documentary","documentaries","documental"};
         if("Terror".equals(category))return new String[]{"terror","horror"};
         if("Comédia".equals(category))return new String[]{"comedia","comedy"};
@@ -944,7 +943,7 @@ public final class MainActivity extends Activity {
         return new String[0];
     }
     private boolean genreCategory(String name){
-        return "Anime".equals(name)||"Documentários".equals(name)||"Terror".equals(name)
+        return "Documentários".equals(name)||"Terror".equals(name)
             ||"Comédia".equals(name)||"Ficção científica".equals(name);
     }
     private boolean categoryMatch(String category,String provider,String catalogName,String catalogId,String genres){

@@ -1,31 +1,31 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-tv-addons-rc4",
+  "batch": "telares-live-epg-seasons-rc5",
   "date": "2026-10-16",
-  "feature": "Quatro addons Stremio adicionados sem apagar os anteriores, categoria Canais ao vivo em Android TV/iPad/Windows, filtros mais profundos por gênero e catálogo, suporte tv/channel e custom DC Universe",
+  "feature": "Canais ao vivo: guia 3 áreas, reprodução e estabilidade em correção; seleção por temporadas. Categoria Anime removida por solicitação do usuário, preservando Animação e todas as demais categorias.",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc4",
+      "version": "1.0.0-rc5",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.2"
+      "version": "0.2.3"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.2"
+      "version": "0.2.3"
     }
   ],
   "utilities": [
@@ -87,7 +87,6 @@
     ],
     "extra": [
       "Canais ao vivo",
-      "Anime",
       "Netflix",
       "Max / HBO",
       "Disney+",
@@ -121,6 +120,7 @@
     "O manifesto Tvvio declara tipo tv com canais agrupados.",
     "DC Universe expõe catálogo de tipo personalizado, com condições de acesso do próprio addon.",
     "Railway IPTV e PlavioHD não puderam ser inspecionados da rede do assistente; integração valida manifestos quando online.",
-    "Os filtros por plataforma são baseados em declarações dos addons, não dados oficiais de disponibilidade no Brasil."
+    "Os filtros por plataforma são baseados em declarações dos addons, não dados oficiais de disponibilidade no Brasil.",
+    "Anime removido como filtro visível por não retornar catálogos; Animação permanece como gênero anterior."
   ]
 }

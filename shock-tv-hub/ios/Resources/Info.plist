@@ -6,8 +6,8 @@
  <key>CFBundleDisplayName</key><string>Telares Play</string>
  <key>CFBundleName</key><string>TelaresPlay</string>
  <key>CFBundlePackageType</key><string>APPL</string>
- <key>CFBundleVersion</key><string>7</string>
- <key>CFBundleShortVersionString</key><string>0.3.3</string>
+ <key>CFBundleVersion</key><string>8</string>
+ <key>CFBundleShortVersionString</key><string>0.3.4</string>
  <key>CFBundleDevelopmentRegion</key><string>pt_BR</string>
  <key>LSRequiresIPhoneOS</key><true/>
  <key>MinimumOSVersion</key><string>9.0</string>

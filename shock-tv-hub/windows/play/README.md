@@ -13,3 +13,7 @@ Os menus Filmes, Séries e todos os menus anteriores foram preservados. Categori
 ## V0.2.2: canais ao vivo e quatro manifestos
 
 Seção Canais ao vivo na navegação desktop (mouse e teclado). O catálogo reconhece tipos `tv`, `channel`, além dos tipos personalizados mapeados para visualização; URLs originais da especificação Stremio são preservadas na busca dos streams. O VLC reproduz HLS/HTTP quando a fonte responde e oferece alternativas com fallback. Fontes personalizadas, favoritos, histórico e categorias preexistentes são mantidos. A categoria ao vivo não utiliza checkpoints VOD e não permite avançar/retroceder artificialmente. Algumas fontes podem exigir assinatura ou falhar por DRM e codecs.
+
+## RC5
+
+Filtro Anime removido da navegação, sem apagar o gênero Animação e sem modificar a busca normal de filmes e séries. Outras categorias mantidas.

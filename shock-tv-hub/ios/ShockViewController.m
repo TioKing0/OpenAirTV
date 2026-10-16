@@ -500,7 +500,6 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (NSArray *)categoryAliases:(NSString *)tag {
     if([tag isEqualToString:@"Canais ao vivo"])return @[@"tv",@"channel",@"ao vivo",@"live"];
-    if([tag isEqualToString:@"Anime"])return @[@"anime",@"japanese animation",@"animacao japonesa"];
     if([tag isEqualToString:@"Documentários"])return @[@"documentario",@"documentary",@"documentaries",@"documental"];
     if([tag isEqualToString:@"Terror"])return @[@"terror",@"horror"];
     if([tag isEqualToString:@"Comédia"])return @[@"comedia",@"comedy"];
@@ -515,7 +514,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     return @[];
 }
 - (BOOL)genreCategory:(NSString *)tag {
-    return [@[@"Anime",@"Documentários",@"Terror",@"Comédia",@"Ficção científica"] containsObject:tag];
+    return [@[@"Documentários",@"Terror",@"Comédia",@"Ficção científica"] containsObject:tag];
 }
 - (BOOL)category:(NSString *)tag fromProvider:(NSString *)provider catalog:(NSString *)catalog
     catalogId:(NSString *)ident genres:(NSArray *)genres {
@@ -549,7 +548,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     UIAlertController *dialog=[UIAlertController alertControllerWithTitle:@"Categorias Telares"
         message:@"Catálogos declarados pelos addons. Não comprovam disponibilidade oficial ou assinatura de streaming."
         preferredStyle:UIAlertControllerStyleActionSheet];
-    for(NSString *tag in @[@"Canais ao vivo",@"Anime",@"Netflix",@"Max / HBO",@"Disney+",@"Prime Video",@"Apple TV+",@"Paramount+",@"Crunchyroll", @"Documentários",@"Terror",@"Comédia",@"Ficção científica"]){
+    for(NSString *tag in @[@"Canais ao vivo",@"Netflix",@"Max / HBO",@"Disney+",@"Prime Video",@"Apple TV+",@"Paramount+",@"Crunchyroll", @"Documentários",@"Terror",@"Comédia",@"Ficção científica"]){
         [dialog addAction:[UIAlertAction actionWithTitle:tag
             style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
                 self.searching=NO;

@@ -60,8 +60,8 @@ def unique(items):
 
 import unicodedata
 
-CATEGORY_OPTIONS = ["Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"]
-GENRE_ALIASES = {"Anime":["anime","japanese animation","animacao japonesa"],"Documentários":["documentario","documentary","documentaries","documental"],"Terror":["terror","horror"],"Comédia":["comedia","comedy"],"Ficção científica":["ficcao cientifica","science fiction","sci fi","scifi","sci-fi","science-fiction"]}
+CATEGORY_OPTIONS = ["Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"]
+GENRE_ALIASES = {"Documentários":["documentario","documentary","documentaries","documental"],"Terror":["terror","horror"],"Comédia":["comedia","comedy"],"Ficção científica":["ficcao cientifica","science fiction","sci fi","scifi","sci-fi","science-fiction"]}
 PLATFORM_ALIASES = {"Netflix":["netflix"],"Max / HBO":["hbo","hbomax","hbo max","max originals","max catalog","max tv"],"Disney+":["disney+","disney plus","disneyplus"],"Prime Video":["prime video","primevideo","amazon prime"],"Apple TV+":["apple tv+","apple tv plus","appletv+","apple originals"],"Paramount+":["paramount+","paramount plus","paramountplus"],"Crunchyroll":["crunchyroll"]}
 
 def normalized(value):

@@ -31,10 +31,6 @@ class CatalogTest(unittest.TestCase):
             items=catalog.discover(["https://example.com/manifest.json"],"Teste")
         self.assertEqual([x["name"] for x in items],["Teste"])
 
-    def test_anime_requires_explicit_genre_or_catalog(self):
-        self.assertIn("Anime", catalog.category_of("Anime HD","Cinemeta",[],"top"))
-        self.assertIn("Anime", catalog.category_of("Top","Cinemeta",["Action","Anime"],"top"))
-        self.assertNotIn("Anime", catalog.category_of("Animation", "Generic", ["Animation"], "top"))
     def test_platforms_use_addon_provenance_not_title(self):
         self.assertIn("Netflix", catalog.category_of("Netflix Movies","Addon",[],"netflix"))
         self.assertIn("Disney+", catalog.category_of("Disney Plus","Addon",[],"disney"))
@@ -44,7 +40,7 @@ class CatalogTest(unittest.TestCase):
     def test_extra_genres(self):
         for label,genre in [("Documentários","Documentary"),("Terror","Horror"),("Comédia","Comedy"),("Ficção científica","Sci-Fi")]:
             self.assertIn(label,catalog.category_of("Top","Addon",[genre],"featured"))
-        self.assertNotIn("Anime",catalog.category_of("Top","Addon",["Animation"],"featured"))
+        self.assertNotIn("Documentários",catalog.category_of("Top","Addon",["Animation"],"featured"))
     def test_extra_platforms(self):
         for label,name in {"Prime Video":"Amazon Prime Video","Apple TV+":"Apple TV+","Paramount+":"Paramount Plus","Crunchyroll":"Crunchyroll"}.items():
             self.assertIn(label,catalog.category_of(name,"Addon",[],"top"))
@@ -53,8 +49,20 @@ class CatalogTest(unittest.TestCase):
         options={"extra":[{"name":"genre","options":["Documentary","Sci-Fi","Horror","Comedy"]}]}
         for label in ("Documentários","Ficção científica","Terror","Comédia"):
             self.assertTrue(catalog.declared_genre(options,label).startswith("/genre="))
+    def test_removed_anime_category_but_preserved_animation_shelf(self):
+        self.assertNotIn("Anime",catalog.CATEGORY_OPTIONS)
+        self.assertNotIn("Anime",catalog.GENRE_ALIASES)
+        root=pathlib.Path(__file__).resolve().parents[3]
+        android=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        ipad=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        self.assertIn('"Animação","Ficção científica"',android)
+        self.assertNotIn('if("Anime".equals(category))',android)
+        self.assertNotIn('if([tag isEqualToString:@"Anime"])',ipad)
+        self.assertIn('@"Filmes"',ipad)
+        self.assertIn('@"Séries"',ipad)
+
     def test_existing_categories_kept(self):
-        self.assertEqual({"Anime","Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
+        self.assertEqual({"Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
         self.assertEqual({"Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"}.difference(catalog.CATEGORY_OPTIONS),set())
 
     def test_navigation_and_original_genres_are_preserved(self):
