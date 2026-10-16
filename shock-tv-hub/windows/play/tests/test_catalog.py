@@ -125,4 +125,16 @@ class CatalogTest(unittest.TestCase):
         self.assertFalse(catalog.live_catalog({"name":"Cinemeta","id":"cinemeta"},
             {"type":"series","id":"top","name":"Popular TV series"},"https://v3-cinemeta.strem.io/manifest.json"))
 
+
+    def test_other_clients_enforce_independent_display_type(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        ios=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        java=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        self.assertIn("isBroadcastCatalog:catalog manifest:manifest source:url",ios)
+        self.assertIn("isBroadcastCatalog:cat manifest:manifest source:source",ios)
+        self.assertIn('type=[self str:item[@"_kind"]]',ios)
+        self.assertIn("liveCatalog=isBroadcastCatalog(manifest,catalog,manifestUrl)",java)
+        self.assertIn('m.displayType=liveCatalog?"tv"',java)
+        self.assertIn('if(!isChannel(m)&&m.name.toLowerCase(Locale.ROOT).contains(needle))',java)
+
 if __name__=="__main__":unittest.main()

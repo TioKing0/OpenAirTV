@@ -1167,7 +1167,7 @@ public final class MainActivity extends Activity {
         }
         // Results already loaded on the main screen can be shown immediately.
         String needle=normalized.toLowerCase(Locale.ROOT);
-        for(Media m:knownItems)if(m.name.toLowerCase(Locale.ROOT).contains(needle))
+        for(Media m:knownItems)if(!isChannel(m)&&m.name.toLowerCase(Locale.ROOT).contains(needle))
             searchMatches.put(identity(m),m);
         searchFeedback.setText("Procurando “"+normalized+"” nos addons…");
         buildSearchResults();
@@ -1191,6 +1191,7 @@ public final class MainActivity extends Activity {
                         String type=catalog.optString("type","");
                         String id=catalog.optString("id","");
                         if(!("movie".equals(type)||"series".equals(type)||"tv".equals(type)))continue;
+                        if(isBroadcastCatalog(manifest,catalog,addon))continue;
                         if(!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
                         JSONArray extras=catalog.optJSONArray("extra");
                         if(extras==null)continue;

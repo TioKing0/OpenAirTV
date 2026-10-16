@@ -962,6 +962,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 if(attempts>=6)break;
                 NSString *type=[self str:cat[@"type"]],*ident=[self str:cat[@"id"]];
                 if(![type isEqualToString:@"movie"]&&![type isEqualToString:@"series"])continue;
+                if([self isBroadcastCatalog:cat manifest:manifest source:url])continue;
                 BOOL canSearch=NO;
                 for(id extra in [self arr:cat[@"extra"]]){
                     if([extra isKindOfClass:[NSDictionary class]]
