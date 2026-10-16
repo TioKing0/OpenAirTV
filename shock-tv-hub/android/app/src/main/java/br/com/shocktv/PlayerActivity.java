@@ -52,7 +52,7 @@ public final class PlayerActivity extends Activity {
     private final Set<String> failedSources=new HashSet<>();
     private int selectedIndex=-1;
     private boolean startedCurrent=false,markedFinished=false,showingError=false;
-    private boolean queue=false,closing=false;
+    private boolean queue=false,closing=false,isLive=false;
     private long lastKnownPosition=0L;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable periodic=new Runnable(){
@@ -74,6 +74,7 @@ public final class PlayerActivity extends Activity {
         String original=getIntent().getStringExtra("url");
         title=getIntent().getStringExtra("title");
         currentKey=getIntent().getStringExtra("libraryKey");
+        isLive=getIntent().getBooleanExtra("isLive",false);
         if(!isMediaUrl(original)||currentKey==null||currentKey.isEmpty()){
             Toast.makeText(this,"Endereço de mídia inválido.",Toast.LENGTH_LONG).show();
             finish();return;
@@ -83,7 +84,7 @@ public final class PlayerActivity extends Activity {
             title,getIntent().getStringExtra("poster"),getIntent().getStringExtra("description"),
             getIntent().getStringExtra("source"),getIntent().getStringExtra("episodeId"));
         UserLibrary.Entry prior=library.get(currentKey);
-        lastKnownPosition=!getIntent().getBooleanExtra("restart",false)&&prior.canContinue()?
+        lastKnownPosition=!isLive&&!getIntent().getBooleanExtra("restart",false)&&prior.canContinue()?
             prior.positionMs:0;
         queuedUrls=getIntent().getStringArrayExtra("playlistUrls");
         queuedKeys=getIntent().getStringArrayExtra("playlistKeys");
@@ -390,7 +391,9 @@ public final class PlayerActivity extends Activity {
                     startedCurrent=true;
                     library.start(currentKey,currentUrl());
                 }else if(state==Player.STATE_ENDED){
-                    markedFinished=true;save(true);
+                    if(!isLive){markedFinished=true;save(true);}
+                    else handlePlaybackError(new PlaybackException("Live stream ended",
+                        null,PlaybackException.ERROR_CODE_IO_UNSPECIFIED));
                 }
             }
             @Override public void onPlayerError(PlaybackException error){
@@ -510,6 +513,7 @@ public final class PlayerActivity extends Activity {
           .show();
     }
     private void save(boolean completed){
+        if(isLive)return; // Linear broadcasts have no VOD checkpoint.
         if(!startedCurrent||player==null||library==null||currentKey==null)return;
         long position=player.getCurrentPosition(),duration=player.getDuration();
         if(position<0||position==C.TIME_UNSET)position=0;

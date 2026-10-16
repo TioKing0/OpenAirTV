@@ -156,7 +156,7 @@ public final class StreamProbe {
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Range","bytes=0-2047");
                 conn.setRequestProperty("Accept-Encoding","identity");
-                conn.setRequestProperty("User-Agent","ShockTV/0.3.4 (Android TV)");
+                conn.setRequestProperty("User-Agent","Telares/1.0 (Android TV)");
                 // Only use addon-provided headers for original same-origin requests.
                 boolean sameOrigin=origin(current).equals(origin(originalUri));
                 for(int i=0;i<original.headers.length&&i<original.values.length;i++){

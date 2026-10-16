@@ -1464,6 +1464,16 @@ public final class MainActivity extends Activity {
             }
             final JSONArray result=episodes;
             final int countCompatible=compatible,failed=errors,empty=withoutEpisodes;
+            if(isChannel(media)){
+                // Live HLS endpoints frequently reject short-range probes while ExoPlayer
+                // can load their playlists. Append bounded direct candidates as fallbacks.
+                Set<String> verifiedUrls=new HashSet<>();
+                for(StreamProbe.Option o:checked.available)verifiedUrls.add(o.url);
+                for(StreamProbe.Option candidate:candidates){
+                    if(checked.available.size()>=24)break;
+                    if(verifiedUrls.add(candidate.url))checked.available.add(candidate);
+                }
+            }
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
@@ -1710,6 +1720,7 @@ public final class MainActivity extends Activity {
         Intent intent=new Intent(this,PlayerActivity.class);
         intent.putExtra("url",url);intent.putExtra("title",m.name);
         intent.putExtra("id",m.id);intent.putExtra("type",m.type);
+        intent.putExtra("isLive",isChannel(m));
         intent.putExtra("poster",m.poster);intent.putExtra("description",m.description);
         intent.putExtra("source",m.source);intent.putExtra("episodeId",m.episodeId);
         intent.putExtra("libraryKey",key);intent.putExtra("restart",restart);
