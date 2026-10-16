@@ -1,0 +1,119 @@
+name: Shock TV Source ZIP and iOS 9 IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [shock-tv-hub-studio]
+    paths:
+      - "shock-tv-hub/ios/**"
+      - ".github/workflows/shock-tv-legacy-ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    name: Complete editable source ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack complete Shock TV project
+        run: |
+          mkdir -p dist
+          git archive --format=zip --prefix=Shock-TV-Hub/ \
+            -o dist/Shock-TV-Hub-v0.3.6-SOURCE.zip HEAD:shock-tv-hub
+          unzip -t dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | tail -n 2
+          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
+          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
+          unzip -Z1 dist/Shock-TV-Hub-v0.3.6-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shock-TV-Hub-v0.3.6-Complete-Source-ZIP
+          path: dist/Shock-TV-Hub-v0.3.6-SOURCE.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  ios:
+    name: iPad mini 1 ARMv7 IPA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash curl git make perl unzip zip xz-utils \
+            file fakeroot dpkg libtinfo6 ca-certificates bzip2 imagemagick
+
+      - name: Install Theos and ARMv7 toolchain
+        env:
+          CI: "1"
+          THEOS: ${{ github.workspace }}/theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/toolchain"
+          curl -fL --retry 3 \
+            https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz \
+            | tar -xJ -C "$THEOS/toolchain"
+
+      - name: Install iOS 9.2 SDK
+        env:
+          THEOS: ${{ github.workspace }}/theos
+        run: |
+          set -euxo pipefail
+          mkdir -p "$THEOS/sdks"
+          curl -fL --retry 3 \
+            https://raw.githubusercontent.com/Sn0wCooder/theos-sdks/master/iPhoneOS9.2.sdk.tbz2 \
+            -o /tmp/iPhoneOS9.2.sdk.tbz2
+          tar -xjf /tmp/iPhoneOS9.2.sdk.tbz2 -C "$THEOS/sdks"
+          test -d "$THEOS/sdks/iPhoneOS9.2.sdk"
+
+      - name: Create Shock TV iPad home screen icons
+        run: |
+          set -euxo pipefail
+          DIR=shock-tv-hub/ios/Resources
+          convert -size 152x152 xc:'#071828' \
+             -fill '#40c5d8' -draw 'roundrectangle 10,10 141,141 25,25' \
+             -fill '#071828' -draw 'polygon 53,36 53,115 113,76' \
+             -font DejaVu-Sans-Bold -pointsize 19 -fill white \
+             -gravity south -annotate +0+11 SHOCK \
+             "$DIR/Icon-76.png"
+          convert "$DIR/Icon-76.png" -resize 29x29! "$DIR/AppIcon29x29~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 58x58! "$DIR/AppIcon29x29@2x~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 40x40! "$DIR/AppIcon40x40~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 80x80! "$DIR/AppIcon40x40@2x~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 76x76! "$DIR/AppIcon76x76~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 152x152! "$DIR/AppIcon76x76@2x~ipad.png"
+          convert "$DIR/Icon-76.png" -resize 167x167! "$DIR/AppIcon83.5x83.5@2x~ipad.png"
+          cp "$DIR/AppIcon29x29~ipad.png" "$DIR/AppIcon29x29.png"
+          cp "$DIR/AppIcon40x40~ipad.png" "$DIR/AppIcon40x40.png"
+          cp "$DIR/AppIcon76x76~ipad.png" "$DIR/AppIcon76x76.png"
+
+      - name: Compile ARMv7 iOS 9 application
+        env:
+          THEOS: ${{ github.workspace }}/theos
+        run: |
+          set -euxo pipefail
+          cd shock-tv-hub/ios
+          make clean
+          make FINALPACKAGE=1
+          make stage FINALPACKAGE=1
+
+      - name: Verify Mach-O ARMv7 and package IPA
+        run: |
+          set -euxo pipefail
+          APP="$(find shock-tv-hub/ios/.theos/_ -type d -name 'ShockTV.app' -print -quit)"
+          test -n "$APP"
+          test -f "$APP/ShockTV"
+          file "$APP/ShockTV" | tee /tmp/shocktv-ios-binary.txt
+          grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
+          mkdir -p dist/Payload
+          cp -a "$APP" dist/Payload/ShockTV.app
+          (cd dist && zip -qry ShockTV-Legacy-iOS9-ARMv7.ipa Payload)
+          unzip -t dist/ShockTV-Legacy-iOS9-ARMv7.ipa | tail -n 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shock-TV-Legacy-iOS9-ARMv7-IPA
+          path: dist/ShockTV-Legacy-iOS9-ARMv7.ipa
+          if-no-files-found: error
+          retention-days: 30
