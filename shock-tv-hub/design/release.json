@@ -1,31 +1,31 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-classification-rc6",
+  "batch": "telares-live-stability-rc7",
   "date": "2026-10-16",
-  "feature": "Corrigir confusão entre canais ao vivo e séries Stremio; guia de canais com agrupamento e preview; melhorar fallback de HTTP/HLS sem alterar Filmes/Séries",
+  "feature": "Correção do preview nativo de canais ao vivo no iPad e seleção HTTP sem Range, segregação de canais da home/filmes/séries Android TV, continuidade Windows VLC, restauração da categoria Animes.",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc6",
+      "version": "1.0.0-rc7",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.4"
+      "version": "0.2.5"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.4"
+      "version": "0.2.5"
     }
   ],
   "utilities": [
@@ -98,6 +98,9 @@
       "Terror",
       "Comédia",
       "Ficção científica"
+    ],
+    "restored": [
+      "Anime"
     ]
   },
   "addedAddons": [
@@ -123,5 +126,6 @@
     "Windows: três colunas e prévia VLC dentro do guia.",
     "Fontes ao vivo não passam obrigatoriamente por teste de intervalo HTTP e tentam fallback.",
     "Compatibilidade de canais externos depende de fonte, codecs e DRM."
-  ]
+  ],
+  "testStatus": "GitHub CI build pending; physical decoding unverified"
 }

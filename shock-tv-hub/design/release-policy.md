@@ -37,3 +37,12 @@ A categoria **Anime** foi retirada dos filtros de TV, iPad e Windows Play por re
 ## RC6: evitar regressão de canais disfarçados de séries
 
 `type` guarda o **tipo do protocolo** Stremio; `displayType` no Android e `_kind` no iOS/Windows guardam a **categoria da interface**. Um canal Telecine publicado em catálogo de tipo `series` deve continuar sendo consultado em `/stream/series/...`, mas aparecer **somente** em Canais ao vivo. Detectar por tipo `tv/channel` e também por proveniência de catálogo declaradamente IPTV. Menus Séries, Filmes e resultados de busca VOD nunca aceitam canais. Manter testes automatizados de regressão e não inferir direito legal de reprodução. Transmissões ao vivo não possuem retomada VOD. iPad e Windows mostram prévia real pelo player; Android TV abre o player em tela cheia a partir do guia de três painéis (prévia de capa estática). O probe HTTP de 2 KB não confirma a decodificabilidade e não deve bloquear todas as tentativas de fonte ao vivo.
+
+## RC7: contrato de classificação e estabilidade
+
+- **Anime** restaurado nas categorias de Android TV, iOS e Windows, além de Animação (que nunca deve ser removida).
+- Filmes/Séries/Início não devem listar canais da coleção IPTV/Tvvio, mesmo que o manifesto use `series` como tipo de protocolo; `type` técnico continua separado da classificação `tv` da interface.
+- O guia ao vivo mantém esquerda=grupos, centro=canais, direita=prévia. Erro de reprodução em player iOS embutido não deve executar `dismiss` sobre controller filho, mas exibir mensagem dentro da prévia.
+- Canais podem rejeitar `Range`: iPad usa URLs HTTP/HLS com falha automática; VLC Windows tenta a fonte antes de filtrar pelo pré-teste; Android TV permite candidatos live diretos após probe inconclusivo.
+- Nomes visíveis são Telares, mas identificadores históricos internos ShockTV devem permanecer para permitir atualização dos usuários.
+- A prova final requer teste no aparelho com stream autorizado (a compilação isolada não valida codec, token expiração ou disponibilidade real do canal).

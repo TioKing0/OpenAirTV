@@ -148,4 +148,22 @@ class CatalogTest(unittest.TestCase):
         for s in ("updateLiveGuide","liveGroups","liveChannels"):self.assertIn(s,ipad)
         for s in ("buildLiveChannelGuide","liveGroupOf","isBroadcastCatalog"):self.assertIn(s,tv)
 
+    def test_telares_branding_visible_in_all_clients(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        ios=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        android=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        windows=(root/"windows/play/main.py").read_text(encoding="utf-8")
+        for text in (ios,android,windows):
+            self.assertNotIn('"Shock TV"',text)
+            self.assertNotIn('@"Shock TV"',text)
+            self.assertNotIn('Choque TV',text)
+        self.assertIn('alertControllerWithTitle:@"Telares Play"',ios)
+        self.assertIn('setTitle("Telares TV")',android.replace('.setTitle("Telares TV")','.setTitle("Telares TV")'))
+    def test_live_recovers_without_preflight_on_ipad(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        ios=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        self.assertIn('if(live){\n        // Live endpoints can reject Range',ios)
+        self.assertIn('BOOL embedded=self.playerController.parentViewController==self;',ios)
+        self.assertIn('self.playerController.parentViewController!=self',ios)
+
 if __name__=="__main__":unittest.main()
