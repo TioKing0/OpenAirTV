@@ -14,6 +14,10 @@ static NSString * const kDefaultFenix = @"https://fenixflix.fenixhub.online/mani
 static NSString * const kDefaultTorrentio = @"https://torrentio.strem.fun/manifest.json";
 static NSString * const kDefaultNetflix = @"https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json";
 static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/manifest.json";
+static NSString * const kDefaultIPTV = @"https://catalogo-iptv-production.up.railway.app/manifest.json";
+static NSString * const kDefaultPlavio = @"https://plaviohd.edon.workers.dev/manifest.json";
+static NSString * const kDefaultTvvio = @"https://c69e439124f3-tvvio.baby-beamup.club/manifest.json";
+static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 
 
 /** Lightweight reusable portrait card designed specifically for the 1024x768 legacy iPad. */
@@ -119,7 +123,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 - (UIColor *)dark { return [UIColor colorWithRed:0.037 green:0.071 blue:0.12 alpha:1]; }
 - (UIColor *)accent { return [UIColor colorWithRed:0.39 green:0.84 blue:0.91 alpha:1]; }
 - (NSArray *)defaultSources {
-    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate];
+    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate,kDefaultIPTV,kDefaultPlavio,kDefaultTvvio,kDefaultDC];
 }
 - (NSString *)str:(id)value {
     return [value isKindOfClass:[NSString class]] ? value : @"";
@@ -157,6 +161,11 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                 [self.sources addObject:url];
         }
     }
+    // Preserve all custom sources while registering new bundled addons on upgrades.
+    for(NSString *item in [self defaultSources]){
+        if(![self.sources containsObject:item]&&self.sources.count<30)
+            [self.sources addObject:item];
+    }
     // Addon management remains implemented but is not a visible toolbar button.
     // During playback the automatic stream selector is the default experience.
     self.navigationItem.rightBarButtonItem=nil;
@@ -170,7 +179,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.navigationStrip.backgroundColor=[UIColor colorWithRed:.057 green:.107 blue:.167 alpha:1];
     self.navigationStrip.layer.cornerRadius=12;
     [self.view addSubview:self.navigationStrip];
-    NSArray *tabs=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
+    NSArray *tabs=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"];
     for(NSUInteger index=0;index<tabs.count;index++){
         UIButton *button=[UIButton buttonWithType:UIButtonTypeCustom];
         button.tag=100+(NSInteger)index;
@@ -265,7 +274,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.searchToggle.frame=CGRectMake(width-searchW-margin,navTop,searchW,navHeight);
     self.navigationStrip.frame=CGRectMake(margin,navTop,
         width-margin*3-searchW,navHeight);
-    CGFloat tabW=self.navigationStrip.bounds.size.width/5.0;
+    CGFloat tabW=self.navigationStrip.bounds.size.width/6.0;
     for(UIView *control in self.navigationStrip.subviews)
         if([control isKindOfClass:[UIButton class]])
             control.frame=CGRectMake((control.tag-100)*tabW+3,3,tabW-6,navHeight-6);
@@ -294,14 +303,14 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [self.posterGrid.collectionViewLayout invalidateLayout];
 }
 - (void)setSelectedTab {
-    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"];
     for(UIView *view in self.navigationStrip.subviews){
         if(![view isKindOfClass:[UIButton class]])continue;
         UIButton *button=(UIButton *)view;
         NSInteger index=button.tag-100;
         if(index<0||index>=names.count)continue;
         BOOL chosen=(!self.searching&&([self.filter isEqualToString:names[(NSUInteger)index]]||
-           (index==4&&self.categoryFilter.length>0)));
+           (index==4&&self.categoryFilter.length>0&&![self.filter isEqualToString:@"Ao vivo"])));
         button.backgroundColor=chosen?
             [UIColor colorWithRed:.14 green:.39 blue:.49 alpha:1]:[UIColor clearColor];
         [button setTitleColor:chosen?[UIColor whiteColor]:
@@ -309,10 +318,16 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     }
 }
 - (void)tapTab:(UIButton *)button {
-    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"];
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"];
     NSInteger idx=button.tag-100;
     if(idx<0||idx>=names.count)return;
     if(idx==4){[self showCategoryChooser:button];return;}
+    if(idx==5){
+        self.searching=NO;self.search.hidden=YES;[self.search resignFirstResponder];
+        self.currentTerm=@"";self.search.text=@"";
+        self.categoryFilter=@"Canais ao vivo";self.filter=@"Ao vivo";
+        [self setSelectedTab];[self loadCategory:@"Canais ao vivo"];return;
+    }
     self.searching=NO;
     self.search.hidden=YES;
     [self.search resignFirstResponder];
@@ -336,6 +351,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         stringByReplacingOccurrencesOfString:@"_" withString:@" "];
 }
 - (NSArray *)categoryAliases:(NSString *)tag {
+    if([tag isEqualToString:@"Canais ao vivo"])return @[@"tv",@"channel",@"ao vivo",@"live"];
     if([tag isEqualToString:@"Anime"])return @[@"anime",@"japanese animation",@"animacao japonesa"];
     if([tag isEqualToString:@"Documentários"])return @[@"documentario",@"documentary",@"documentaries",@"documental"];
     if([tag isEqualToString:@"Terror"])return @[@"terror",@"horror"];
@@ -385,7 +401,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     UIAlertController *dialog=[UIAlertController alertControllerWithTitle:@"Categorias Telares"
         message:@"Catálogos declarados pelos addons. Não comprovam disponibilidade oficial ou assinatura de streaming."
         preferredStyle:UIAlertControllerStyleActionSheet];
-    for(NSString *tag in @[@"Anime",@"Netflix",@"Max / HBO",@"Disney+",@"Prime Video",@"Apple TV+",@"Paramount+",@"Crunchyroll", @"Documentários",@"Terror",@"Comédia",@"Ficção científica"]){
+    for(NSString *tag in @[@"Canais ao vivo",@"Anime",@"Netflix",@"Max / HBO",@"Disney+",@"Prime Video",@"Apple TV+",@"Paramount+",@"Crunchyroll", @"Documentários",@"Terror",@"Comédia",@"Ficção científica"]){
         [dialog addAction:[UIAlertAction actionWithTitle:tag
             style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
                 self.searching=NO;
@@ -394,7 +410,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                 self.search.text=@"";
                 self.currentTerm=@"";
                 self.categoryFilter=tag;
-                self.filter=@"Categorias";
+                self.filter=[tag isEqualToString:@"Canais ao vivo"]?@"Ao vivo":@"Categorias";
                 self.title=@"TELARES";
                 [self setSelectedTab];
                 [self loadCategory:tag];
@@ -419,9 +435,17 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
             NSString *provider=[self str:manifest[@"name"]];
             NSUInteger loaded=0;
             for(NSDictionary *cat in [self arr:manifest[@"catalogs"]]){
-                if(loaded>=7)break;
+                if(loaded>=22)break;
                 NSString *kind=[self str:cat[@"type"]],*ident=[self str:cat[@"id"]];
-                if(![kind isEqualToString:@"movie"]&&![kind isEqualToString:@"series"])continue;
+                BOOL live=[tag isEqualToString:@"Canais ao vivo"];
+                BOOL channel=[kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"];
+                BOOL custom=![kind isEqualToString:@"movie"]&&![kind isEqualToString:@"series"]&&!channel;
+                if(live&&!channel)continue;
+                if(!live&&channel)continue;
+                if(custom&&!([[self str:cat[@"name"]].lowercaseString containsString:@"movie"]||
+                             [[self str:cat[@"name"]].lowercaseString containsString:@"series"]||
+                             [[self str:cat[@"id"]].lowercaseString containsString:@"movie"]||
+                             [[self str:cat[@"id"]].lowercaseString containsString:@"series"]))continue;
                 if(!ident.length||ident.length>100)continue;
                 NSCharacterSet *safe=[NSCharacterSet characterSetWithCharactersInString:
                     @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-"];
@@ -429,7 +453,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                 NSString *catName=[self str:cat[@"name"]];
                 BOOL providerCatalog=[self category:tag fromProvider:provider catalog:catName catalogId:ident genres:@[]];
                 NSString *genre=[self genreExtra:cat forCategory:tag];
-                if(!providerCatalog&&!genre.length&&![self genreCategory:tag])continue;
+                if(!live&&!providerCatalog&&!genre.length&&![self genreCategory:tag])continue;
                 loaded++;
                 NSString *url=[NSString stringWithFormat:@"%@catalog/%@/%@%@.json",
                     base,[self pathEncode:kind],[self pathEncode:ident],genre];
@@ -437,12 +461,17 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                     if(generation!=self.taskGeneration||error)return;
                     NSMutableArray *items=[NSMutableArray array];
                     for(NSDictionary *raw in [self arr:response[@"metas"]]){
-                        BOOL belongs=providerCatalog||genre.length>0||
+                        BOOL belongs=live||providerCatalog||genre.length>0||
                            [self category:tag fromProvider:provider catalog:catName
                              catalogId:ident genres:[self arr:raw[@"genres"]]];
                         if(!belongs)continue;
                         NSDictionary *media=[self mediaFrom:raw type:kind base:base];
-                        if(media)[items addObject:media];
+                        if(media){
+                            NSMutableDictionary *display=[media mutableCopy];
+                            if(live)display[@"_kind"]=@"tv";
+                            else if(custom)display[@"_kind"]=[[self str:cat[@"id"]].lowercaseString containsString:@"series"]?@"series":@"movie";
+                            [items addObject:display];
+                        }
                         if(items.count>=35)break;
                     }
                     [self appendItems:items to:self.catalogItems];
@@ -657,7 +686,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     }
 }
 - (void)changeSection {
-    self.filter = [@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias"] objectAtIndex:
+    self.filter = [@[@"Início",@"Filmes",@"Séries",@"Minha lista",@"Categorias",@"Ao vivo"] objectAtIndex:
         (NSUInteger)MAX(0,self.sections.selectedSegmentIndex)];
     [self refreshList];
 }
@@ -702,8 +731,10 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     } else {
         for (NSDictionary *item in items) {
             NSString *type = [self str:item[@"type"]];
-            if ([self.filter isEqualToString:@"Filmes"] && ![type isEqualToString:@"movie"])continue;
-            if ([self.filter isEqualToString:@"Séries"] && ![type isEqualToString:@"series"])continue;
+            if ([self.filter isEqualToString:@"Filmes"] && ![type isEqualToString:@"movie"]&&
+                ![[self str:item[@"_kind"]] isEqualToString:@"movie"])continue;
+            if ([self.filter isEqualToString:@"Séries"] && ![type isEqualToString:@"series"]&&
+                ![[self str:item[@"_kind"]] isEqualToString:@"series"])continue;
             if (self.currentTerm.length>=2 &&
                 [[self str:item[@"name"]].lowercaseString rangeOfString:self.currentTerm.lowercaseString].location
                     == NSNotFound)continue;
@@ -845,7 +876,9 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         forIndexPath:indexPath];
     NSDictionary *item=[self mediaAtIndex:indexPath.item];
     cell.caption.text=[self str:item[@"name"]];
-    cell.typeTag.text=[[self str:item[@"type"]] isEqualToString:@"series"]?@"SÉRIE":@"FILME";
+    NSString *kind=[self str:item[@"_kind"]].length?[self str:item[@"_kind"]]:[self str:item[@"type"]];
+    cell.typeTag.text=([kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"])?@"AO VIVO":
+        [kind isEqualToString:@"series"]?@"SÉRIE":@"FILME";
     cell.imageURL=[self str:item[@"poster"]];
     cell.art.image=[self.imageCache objectForKey:cell.imageURL];
     if(!cell.art.image)[self loadPoster:cell.imageURL into:cell.art];
@@ -1088,8 +1121,10 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [self cleanCurrentPlayer];
     self.activePlayback=[item mutableCopy];
     self.playbackStarted=NO;
-    self.seekAfterReady=self.lastPlaybackPosition;
-    if(self.seekAfterReady<=0){
+    BOOL live=[[self str:item[@"_kind"]] isEqualToString:@"tv"]||
+        [[self str:item[@"type"]] isEqualToString:@"tv"];
+    self.seekAfterReady=live?0:self.lastPlaybackPosition;
+    if(!live&&self.seekAfterReady<=0){
         NSString *entryKey=[self keyFor:item];
         for(NSDictionary *entry in [self savedEntries]){
             if([[self keyFor:entry] isEqualToString:entryKey]&&[entry[@"position"] doubleValue]>5){
@@ -1227,6 +1262,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 }
 - (void)saveCurrentPosition {
     if(!self.playbackStarted||!self.moviePlayer||!self.activePlayback)return;
+    if([[self str:self.activePlayback[@"_kind"]] isEqualToString:@"tv"])return;
     Float64 current=CMTimeGetSeconds(self.moviePlayer.currentTime);
     if(isfinite(current)&&current>0){
         self.lastPlaybackPosition=current;
