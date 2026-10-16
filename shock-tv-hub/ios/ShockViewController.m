@@ -908,12 +908,9 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 [self.results addObject:item];
     } else {
         for (NSDictionary *item in items) {
-            NSString *type=[self str:item[@"_kind"]];
-            if(!type.length){
-                NSString *origin=[self normalizedCategory:[self str:item[@"_base"]]];
-                type=([origin containsString:@"catalogo iptv"]||[origin containsString:@"tvvio"])?
-                    @"tv":[self str:item[@"type"]];
-            }
+            // Use the same live classifier everywhere, including entries from old versions.
+            NSString *type=[self isLiveItem:item]?@"tv":[self str:item[@"_kind"]];
+            if(!type.length)type=[self str:item[@"type"]];
             if(([self.filter isEqualToString:@"Início"]||
                 [self.filter isEqualToString:@"Filmes"]||
                 [self.filter isEqualToString:@"Séries"])&&[type isEqualToString:@"tv"])continue;
@@ -1286,7 +1283,12 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(item!=self.selectedMedia)return;
     if(index>=all.count){
         if(!found.count){
-            [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Opções BitTorrent não são reproduzidas diretamente no iPad."];
+            if([self isLiveItem:item]){
+                self.liveMessage.text=@"Este canal não retornou um endereço HTTP/HLS compatível.";
+                self.liveFullscreen.hidden=YES;
+            }else{
+                [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Opções BitTorrent não são reproduzidas diretamente no iPad."];
+            }
             return;
         }
         [self chooseAutomaticallyFrom:found item:item];
@@ -1345,8 +1347,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (BOOL)isLiveItem:(NSDictionary *)item {
     NSString *kind=[self str:item[@"_kind"]];
     NSString *type=[self str:item[@"type"]];
+    NSString *origin=[self normalizedCategory:[self str:item[@"_base"]]];
     return [kind isEqualToString:@"tv"]||[type isEqualToString:@"tv"]||
-           [type isEqualToString:@"channel"];
+           [type isEqualToString:@"channel"]||
+           [origin containsString:@"catalogo iptv production"]||
+           [origin containsString:@"tvvio.baby beamup"];
 }
 - (void)chooseAutomaticallyFrom:(NSArray *)candidates item:(NSDictionary *)item {
     NSUInteger generation=self.streamRequestGeneration;
@@ -1356,6 +1361,33 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     ShockStreamChecker *checker=[[ShockStreamChecker alloc]init];
     self.streamChecker=checker;
     __weak ShockViewController *weakSelf=self;
+
+    if(live){
+        // Live endpoints can reject Range even when a native HLS player can open
+        // the playlist. Avoid blocking a playable channel behind a 2 KB probe.
+        NSMutableArray *direct=[NSMutableArray array];
+        for(NSDictionary *candidate in candidates){
+            if(direct.count>=16)break;
+            NSURL *url=[NSURL URLWithString:[self str:candidate[@"_url"]]];
+            if(!url.host)continue;
+            NSString *path=url.path.lowercaseString;
+            if([path hasSuffix:@".mpd"]||[path hasSuffix:@".mkv"]||
+               [path hasSuffix:@".webm"])continue;
+            [direct addObject:candidate];
+        }
+        self.streamChecker=nil;
+        if(!direct.count){
+            self.liveMessage.text=@"Nenhuma URL de canal suportada pelo iOS 9.";
+            return;
+        }
+        self.workingStreams=direct;
+        self.selectedMedia=item;
+        self.playingSourceIndex=0;
+        self.lastPlaybackPosition=0;
+        self.closingPlayer=NO;
+        [self playStream:direct[0]];
+        return;
+    }
     [checker verify:candidates completion:^(NSArray *available,NSUInteger checked) {
         ShockViewController *strong=weakSelf;
         if(!strong||generation!=strong.streamRequestGeneration)return;
@@ -1414,9 +1446,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     [self cleanCurrentPlayer];
     self.activePlayback=[item mutableCopy];
     self.playbackStarted=NO;
-    BOOL live=[[self str:item[@"_kind"]] isEqualToString:@"tv"]||
-        [[self str:item[@"type"]] isEqualToString:@"tv"]||
-        [[self str:item[@"type"]] isEqualToString:@"channel"];
+    BOOL live=[self isLiveItem:item];
     self.seekAfterReady=live?0:self.lastPlaybackPosition;
     if(!live&&self.seekAfterReady<=0){
         NSString *entryKey=[self keyFor:item];
@@ -1433,15 +1463,17 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.hasPlayerObservation=YES;
     self.moviePlayer=[AVPlayer playerWithPlayerItem:playerItem];
     if(live){
-        // HLS often needs extra startup time on Apple A5 devices.
-        // Still recover from a source that never reaches ReadyToPlay.
+        // A live stream can report Ready but never deliver a playable buffer.
+        // Allow extra A5 startup time and move on only when it is still stalled.
         AVPlayerItem *expected=playerItem;
         __weak ShockViewController *weakSelf=self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(17*NSEC_PER_SEC)),
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(22*NSEC_PER_SEC)),
             dispatch_get_main_queue(),^{
                 ShockViewController *strong=weakSelf;
                 if(!strong||strong.closingPlayer||strong.observedPlayerItem!=expected)return;
-                if(expected.status!=AVPlayerItemStatusReadyToPlay)
+                BOOL buffered=expected.playbackBufferFull||expected.playbackLikelyToKeepUp;
+                if(expected.status!=AVPlayerItemStatusReadyToPlay||
+                   (strong.moviePlayer.rate<=0&&!buffered))
                     [strong tryNextPlaybackSource];
             });
     }
@@ -1592,15 +1624,28 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.closingPlayer=YES;
     [self cleanCurrentPlayer];
     __weak ShockViewController *weakSelf=self;
-    [self.playerController dismissViewControllerAnimated:YES completion:^{
+    BOOL embedded=self.playerController.parentViewController==self;
+    if(embedded){
+        [self.playerController willMoveToParentViewController:nil];
+        [self.playerController.view removeFromSuperview];
+        [self.playerController removeFromParentViewController];
+    }
+    void (^finish)(void)=^{
         ShockViewController *strong=weakSelf;
+        if(!strong)return;
         strong.playerController=nil;
         strong.playerSourceButton=nil;
         strong.activePlayback=nil;
         strong.workingStreams=nil;
         strong.closingPlayer=NO;
-        if(error.length)[strong notice:error];
-    }];
+        if(embedded){
+            strong.liveFullscreen.hidden=YES;
+            strong.liveMessage.text=error.length?error:
+                @"Não foi possível iniciar este canal.";
+        }else if(error.length)[strong notice:error];
+    };
+    if(embedded||!self.playerController.presentingViewController)finish();
+    else [self.playerController dismissViewControllerAnimated:YES completion:finish];
 }
 - (void)recordProgress:(double)seconds {
     if(!self.activePlayback)return;
@@ -1635,7 +1680,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     // User left native AVPlayer controller with Done/Back: release all media resources.
-    if(self.playerController&&!self.presentedViewController&&!self.closingPlayer){
+    if(self.playerController&&self.playerController.parentViewController!=self&&
+       !self.presentedViewController&&!self.closingPlayer){
         [self saveCurrentPosition];
         [self cleanCurrentPlayer];
         self.playerController=nil;
