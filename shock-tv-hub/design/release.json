@@ -1,31 +1,31 @@
 {
   "brand": "TELARES",
-  "batch": "telares-categories-rc3",
+  "batch": "telares-live-tv-addons-rc4",
   "date": "2026-10-16",
-  "feature": "Categorias adicionais Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia e Ficção científica; preservadas Filmes, Séries, gêneros anteriores, Anime, Netflix, Max/HBO, Disney+",
+  "feature": "Quatro addons Stremio adicionados sem apagar os anteriores, categoria Canais ao vivo em Android TV/iPad/Windows, filtros mais profundos por gênero e catálogo, suporte tv/channel e custom DC Universe",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc3",
+      "version": "1.0.0-rc4",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.1"
+      "version": "0.2.2"
     }
   ],
   "utilities": [
@@ -86,6 +86,7 @@
       "Romance"
     ],
     "extra": [
+      "Canais ao vivo",
       "Anime",
       "Netflix",
       "Max / HBO",
@@ -99,5 +100,27 @@
       "Comédia",
       "Ficção científica"
     ]
-  }
+  },
+  "addedAddons": [
+    "https://catalogo-iptv-production.up.railway.app/manifest.json",
+    "https://plaviohd.edon.workers.dev/manifest.json",
+    "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
+    "https://h-gate.site/dc/manifest.json"
+  ],
+  "liveTv": {
+    "protocolTypes": [
+      "tv",
+      "channel"
+    ],
+    "autoSelect": true,
+    "seekable": false,
+    "epg": false,
+    "sourceAvailability": "Unverified on device; dependent on provider"
+  },
+  "notes": [
+    "O manifesto Tvvio declara tipo tv com canais agrupados.",
+    "DC Universe expõe catálogo de tipo personalizado, com condições de acesso do próprio addon.",
+    "Railway IPTV e PlavioHD não puderam ser inspecionados da rede do assistente; integração valida manifestos quando online.",
+    "Os filtros por plataforma são baseados em declarações dos addons, não dados oficiais de disponibilidade no Brasil."
+  ]
 }

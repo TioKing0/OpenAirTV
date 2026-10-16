@@ -19,3 +19,13 @@ Os apps móveis Android/iOS de telefone **ainda não existem** e não podem ser 
 ## RC3: preservação obrigatória de categorias
 
 As novas categorias de plataformas e gêneros são **aditivas**. Início, Filmes, Séries, Buscar, Minha lista e todos os gêneros anteriores (Ação, Comédia, Drama, Suspense, Terror, Animação, Ficção científica, Documentário e Romance) permanecem. Também permanecem Anime, Netflix, Max/HBO e Disney+; adicionamos Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia e Ficção científica. Sem fonte declarada por addon, mostrar estado vazio, nunca inventar catálogo. A menção a plataformas não significa parceria, licença, assinatura, disponibilidade oficial no Brasil ou garantia de reprodução.
+
+## RC4: Canais ao vivo e manutenção dos filtros existentes
+
+Manifests adicionados (sem redefinir personalizações):
+- https://catalogo-iptv-production.up.railway.app/manifest.json
+- https://plaviohd.edon.workers.dev/manifest.json
+- https://c69e439124f3-tvvio.baby-beamup.club/manifest.json
+- https://h-gate.site/dc/manifest.json
+
+As seções Filmes, Séries, gêneros e filtros anteriores são preservadas. Canais ao vivo usa catálogos Stremio de tipo `tv` / `channel` e seleção automática de mídias HTTP/HLS; transmissões ao vivo não usam retomada/seek por tempo gravado. Addons com tipo personalizado (ex. DC Universe) precisam manter seu tipo original para requests `/meta` e `/stream`. Os filtros de plataforma retornam somente fontes identificadas pelos addons. Não inventar títulos onde não há catálogo. O pacote de IPTV Railway e PlavioHD depende de verificação da disponibilidade dos manifests no aparelho; Tvvio anuncia type tv. Uma compilação aprovada não confirma sinal de canal nem autorização de retransmissão.

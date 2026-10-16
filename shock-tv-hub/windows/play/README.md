@@ -9,3 +9,7 @@ Categorias Anime, Netflix, Max/HBO e Disney+ via metadados declarados dos addons
 ## Categorias RC3
 
 Os menus Filmes, Séries e todos os menus anteriores foram preservados. Categorias complementares: Prime Video, Apple TV+, Paramount+, Crunchyroll, Documentários, Terror, Comédia, Ficção científica, junto de Anime, Netflix, Max/HBO e Disney+. Filtros de gênero usam declarações e metadados dos addons Stremio; categorias por plataforma usam identificação de origem declarada pelo addon. Os dados não atestam assinaturas, direitos de streaming ou disponibilidade regional.
+
+## V0.2.2: canais ao vivo e quatro manifestos
+
+Seção Canais ao vivo na navegação desktop (mouse e teclado). O catálogo reconhece tipos `tv`, `channel`, além dos tipos personalizados mapeados para visualização; URLs originais da especificação Stremio são preservadas na busca dos streams. O VLC reproduz HLS/HTTP quando a fonte responde e oferece alternativas com fallback. Fontes personalizadas, favoritos, histórico e categorias preexistentes são mantidos. A categoria ao vivo não utiliza checkpoints VOD e não permite avançar/retroceder artificialmente. Algumas fontes podem exigir assinatura ou falhar por DRM e codecs.
