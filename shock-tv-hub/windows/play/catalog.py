@@ -90,6 +90,18 @@ def declared_genre(cat,category):
                 return "/genre="+enc(option)
     return ""
 
+def live_catalog(manifest_doc,cat,manifest_url=""):
+    """Technical series type does not imply episodic content."""
+    if cat.get("type") in ("tv","channel"):return True
+    origin=normalized(" ".join(str(x) for x in
+        (manifest_doc.get("id",""),manifest_doc.get("name",""),manifest_url)))
+    if any(term in origin for term in ("catalogo iptv","tvvio","iptv")):return True
+    label=normalized(str(cat.get("name",""))+" "+str(cat.get("id","")))
+    if any(term in label for term in ("canais ao vivo","live channels","tv channels")):return True
+    desc=normalized(manifest_doc.get("description",""))
+    return any(t in desc for t in ("canais ao vivo","live tv")) and any(
+        t in label for t in ("canais","channel","ao vivo","live"))
+
 def effective_kind(type_name, catalog_name="", catalog_id=""):
     if type_name in ("tv","channel"):return "tv"
     if type_name in ("movie","series"):return type_name
@@ -108,7 +120,7 @@ def discover(addons,term="",kind="all",category=""):
             if not isinstance(cat,dict): continue
             typ=cat.get("type"); ident=cat.get("id")
             if not isinstance(ident,str):continue
-            display_kind=effective_kind(typ,cat.get("name",""),ident)
+            display_kind="tv" if live_catalog(m,cat,url) else effective_kind(typ,cat.get("name",""),ident)
             if not display_kind:continue
             # Movies and series remain untouched; live channels have their own page.
             if kind=="all" and display_kind=="tv":continue

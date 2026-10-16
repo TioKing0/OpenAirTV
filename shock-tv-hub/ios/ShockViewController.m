@@ -569,6 +569,24 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(popover){popover.sourceView=button;popover.sourceRect=button.bounds;}
     [self presentViewController:dialog animated:YES completion:nil];
 }
+/** A broadcast can be published as protocol type "series". Keep UI kind separate. */
+- (BOOL)isBroadcastCatalog:(NSDictionary *)cat manifest:(NSDictionary *)manifest source:(NSString *)source {
+    NSString *kind=[self normalizedCategory:[self str:cat[@"type"]]];
+    if([kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"])return YES;
+    NSString *origin=[self normalizedCategory:[NSString stringWithFormat:@"%@ %@ %@",
+        [self str:manifest[@"id"]],[self str:manifest[@"name"]],source]];
+    if([origin containsString:@"catalogo iptv"]||[origin containsString:@"tvvio"]||
+       [origin containsString:@"iptv"])return YES;
+    NSString *label=[self normalizedCategory:[NSString stringWithFormat:@"%@ %@",
+        [self str:cat[@"name"]],[self str:cat[@"id"]]]];
+    if([label containsString:@"canais ao vivo"]||[label containsString:@"live channels"]||
+       [label containsString:@"tv channels"])return YES;
+    NSString *description=[self normalizedCategory:[self str:manifest[@"description"]]];
+    return ([description containsString:@"canais ao vivo"]||
+            [description containsString:@"live tv"])&&
+           ([label containsString:@"canais"]||[label containsString:@"channel"]||
+            [label containsString:@"ao vivo"]||[label containsString:@"live"]);
+}
 - (void)loadCategory:(NSString *)tag {
     self.mode=@"catalog";
     NSInteger generation=++self.taskGeneration;
@@ -586,7 +604,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 if(loaded>=22)break;
                 NSString *kind=[self str:cat[@"type"]],*ident=[self str:cat[@"id"]];
                 BOOL live=[tag isEqualToString:@"Canais ao vivo"];
-                BOOL channel=[kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"];
+                BOOL channel=[self isBroadcastCatalog:cat manifest:manifest source:source];
                 BOOL custom=![kind isEqualToString:@"movie"]&&![kind isEqualToString:@"series"]&&!channel;
                 if(live&&!channel)continue;
                 if(!live&&channel)continue;
@@ -816,6 +834,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 if (fetched >= 8) break;
                 NSString *type = [self str:catalog[@"type"]];
                 NSString *ident = [self str:catalog[@"id"]];
+                if([self isBroadcastCatalog:catalog manifest:manifest source:url])continue;
                 BOOL native=[type isEqualToString:@"movie"]||[type isEqualToString:@"series"];
                 NSString *lower=[[self str:catalog[@"name"]] stringByAppendingFormat:@" %@",ident].lowercaseString;
                 BOOL movieCustom=[lower containsString:@"movie"]||[lower containsString:@"film"];
@@ -889,11 +908,18 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 [self.results addObject:item];
     } else {
         for (NSDictionary *item in items) {
-            NSString *type = [self str:item[@"type"]];
-            if ([self.filter isEqualToString:@"Filmes"] && ![type isEqualToString:@"movie"]&&
-                ![[self str:item[@"_kind"]] isEqualToString:@"movie"])continue;
-            if ([self.filter isEqualToString:@"Séries"] && ![type isEqualToString:@"series"]&&
-                ![[self str:item[@"_kind"]] isEqualToString:@"series"])continue;
+            NSString *type=[self str:item[@"_kind"]];
+            if(!type.length){
+                NSString *origin=[self normalizedCategory:[self str:item[@"_base"]]];
+                type=([origin containsString:@"catalogo iptv"]||[origin containsString:@"tvvio"])?
+                    @"tv":[self str:item[@"type"]];
+            }
+            if(([self.filter isEqualToString:@"Início"]||
+                [self.filter isEqualToString:@"Filmes"]||
+                [self.filter isEqualToString:@"Séries"])&&[type isEqualToString:@"tv"])continue;
+            if([self.filter isEqualToString:@"Ao vivo"]&&![type isEqualToString:@"tv"])continue;
+            if([self.filter isEqualToString:@"Filmes"]&&![type isEqualToString:@"movie"])continue;
+            if([self.filter isEqualToString:@"Séries"]&&![type isEqualToString:@"series"])continue;
             if (self.currentTerm.length>=2 &&
                 [[self str:item[@"name"]].lowercaseString rangeOfString:self.currentTerm.lowercaseString].location
                     == NSNotFound)continue;

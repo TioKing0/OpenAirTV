@@ -108,4 +108,21 @@ class CatalogTest(unittest.TestCase):
             titles=catalog.discover(["https://example.com/manifest.json"])
         self.assertEqual([x["_kind"] for x in titles],["movie"])
 
+    def test_iptv_exposed_as_series_is_live(self):
+        meta={"id":"catalogo-iptv","name":"Catalogo IPTV","description":"Canais ao vivo",
+            "catalogs":[{"type":"series","id":"channels","name":"Telecine"}]}
+        def loader(url):
+            if "/catalog/series/" in url:return {"metas":[{"id":"iptv:telecine","name":"Telecine Fun"}]}
+            raise ValueError(url)
+        with patch.object(catalog,"manifest",return_value=meta),patch.object(catalog,"get_json",side_effect=loader):
+            series=catalog.discover(["https://catalogo-iptv-production.up.railway.app/manifest.json"],kind="series")
+            tv=catalog.discover(["https://catalogo-iptv-production.up.railway.app/manifest.json"],kind="tv")
+        self.assertEqual(series,[])
+        self.assertEqual(len(tv),1)
+        self.assertEqual(tv[0]["type"],"series")
+        self.assertEqual(tv[0]["_kind"],"tv")
+    def test_regular_series_not_mistaken_for_tv(self):
+        self.assertFalse(catalog.live_catalog({"name":"Cinemeta","id":"cinemeta"},
+            {"type":"series","id":"top","name":"Popular TV series"},"https://v3-cinemeta.strem.io/manifest.json"))
+
 if __name__=="__main__":unittest.main()

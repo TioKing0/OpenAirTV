@@ -452,6 +452,22 @@ public final class MainActivity extends Activity {
         synchronized(manifestCache){manifestCache.put(url,loaded);}
         return loaded;
     }
+    /** Source/catalog identifies linear broadcast, even when Stremio type is "series". */
+    private boolean isBroadcastCatalog(JSONObject manifest,JSONObject catalog,String source){
+        String type=catalog.optString("type","");
+        if("tv".equals(type)||"channel".equals(type))return true;
+        String origin=normalizeCategory(manifest.optString("id","")+" "+
+            manifest.optString("name","")+" "+source);
+        if(origin.contains("catalogo iptv")||origin.contains("tvvio")||
+            origin.contains("iptv"))return true;
+        String label=normalizeCategory(catalog.optString("name","")+" "+catalog.optString("id",""));
+        if(label.contains("canais ao vivo")||label.contains("live channels")||
+            label.contains("tv channels"))return true;
+        String desc=normalizeCategory(manifest.optString("description",""));
+        return (desc.contains("canais ao vivo")||desc.contains("live tv"))&&
+            (label.contains("canais")||label.contains("channel")||
+             label.contains("ao vivo")||label.contains("live"));
+    }
     private void loadSource(String manifestUrl){
         pool.execute(()->{
             try{
@@ -464,10 +480,11 @@ public final class MainActivity extends Activity {
                     JSONObject catalog=catalogs.optJSONObject(i);
                     if(catalog==null)continue;
                     String type=catalog.optString("type"),catalogId=catalog.optString("id");
+                    boolean liveCatalog=isBroadcastCatalog(manifest,catalog,manifestUrl);
                     boolean custom=!("movie".equals(type)||"series".equals(type)||"tv".equals(type)||"channel".equals(type));
                     String catalogueName=catalog.optString("name","").toLowerCase(Locale.ROOT);
                     String lowerId=catalogId.toLowerCase(Locale.ROOT);
-                    if(custom&&!(catalogueName.contains("movie")||catalogueName.contains("series")||
+                    if(custom&&!liveCatalog&&!(catalogueName.contains("movie")||catalogueName.contains("series")||
                                   lowerId.contains("movie")||lowerId.contains("series")))continue;
                     if(!catalogId.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
                     try{
@@ -482,7 +499,8 @@ public final class MainActivity extends Activity {
                             Media m=new Media();
                             m.name=meta.optString("name","Sem título");m.id=id;
                             m.type=type; // Preserve the protocol type, including custom DC Universe type.
-                            m.displayType=custom?(lowerId.contains("series")||catalogueName.contains("series")?"series":"movie"):type;
+                            m.displayType=liveCatalog?"tv":custom?
+                                (lowerId.contains("series")||catalogueName.contains("series")?"series":"movie"):type;
                             m.poster=meta.optString("poster","");
                             m.description=meta.optString("description","");
                             m.source=base;m.origin=manifest.optString("name","Addon");
@@ -506,6 +524,7 @@ public final class MainActivity extends Activity {
                                 }
                                 if(prior==null)knownItems.add(candidate);
                                 else{
+                                    if("tv".equals(candidate.displayType))prior.displayType="tv";
                                     if(prior.poster.isEmpty()&&!candidate.poster.isEmpty())prior.poster=candidate.poster;
                                     if(prior.genre.isEmpty()&&!candidate.genre.isEmpty())prior.genre=candidate.genre;
                                     if(prior.description.isEmpty()&&!candidate.description.isEmpty())prior.description=candidate.description;
@@ -521,9 +540,9 @@ public final class MainActivity extends Activity {
         });
     }
     private String identity(Media item){return item.type+"|"+item.id;}
-    private boolean isSeries(Media m){return "series".equals(m.displayType.isEmpty()?m.type:m.displayType);}
-    private boolean isFilm(Media m){return "movie".equals(m.displayType.isEmpty()?m.type:m.displayType);}
-    private boolean isChannel(Media m){return "tv".equals(m.type)||"channel".equals(m.type);}
+    private boolean isSeries(Media m){return !isChannel(m)&&"series".equals(m.displayType.isEmpty()?m.type:m.displayType);}
+    private boolean isFilm(Media m){return !isChannel(m)&&"movie".equals(m.displayType.isEmpty()?m.type:m.displayType);}
+    private boolean isChannel(Media m){return "tv".equals(m.displayType)||"tv".equals(m.type)||"channel".equals(m.type);}
     private boolean hasGenre(Media m,String part){
         return m.genre!=null&&m.genre.toLowerCase(java.util.Locale.ROOT)
               .contains(part.toLowerCase(java.util.Locale.ROOT));
@@ -998,6 +1017,7 @@ public final class MainActivity extends Activity {
                         JSONObject c=cats.optJSONObject(i);if(c==null)continue;
                         String type=c.optString("type",""),id=c.optString("id","");
                         if(!("movie".equals(type)||"series".equals(type))||!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
+                        if(isBroadcastCatalog(manifest,c,source))continue;
                         String name=c.optString("name","");
                         boolean providerCatalog=categoryMatch(category,provider,name,id,"");
                         String argument=genreArgument(c.optJSONArray("extra"),category);

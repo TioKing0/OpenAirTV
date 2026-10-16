@@ -282,7 +282,9 @@ class TelaresPlay:
                             wraplength=137)
             name.pack(anchor="w",padx=7,pady=(4,1))
             name.bind("<Button-1>",lambda e,x=item:self.show_detail(x))
-            self.label(frame,"SÉRIE" if item.get("type")=="series" else "FILME",9,CYAN,bg=PANEL).pack(anchor="w",padx=7)
+            self.label(frame,"AO VIVO" if item.get("_kind")=="tv" else
+                       "SÉRIE" if item.get("_kind",item.get("type"))=="series" else
+                       "FILME",9,CYAN,bg=PANEL).pack(anchor="w",padx=7)
 
     def load_art(self,item,label):
         url=item.get("poster","")
@@ -314,7 +316,9 @@ class TelaresPlay:
         box=tk.Frame(target,bg=LIFT)
         box.pack(fill="x",padx=28,pady=22)
         self.label(box,item.get("name",""),27,WHITE,True,bg=LIFT).pack(anchor="w",padx=23,pady=(22,5))
-        self.label(box,"SÉRIE" if item.get("type")=="series" else "FILME",11,CYAN,True,bg=LIFT).pack(anchor="w",padx=23)
+        self.label(box,"AO VIVO" if item.get("_kind")=="tv" else
+                   "SÉRIE" if item.get("_kind",item.get("type"))=="series" else
+                   "FILME",11,CYAN,True,bg=LIFT).pack(anchor="w",padx=23)
         self.label(box,item.get("description","Sem sinopse disponível.")[:1050],13,MUTED,bg=LIFT,
                    wraplength=680).pack(anchor="w",padx=23,pady=15)
         actions=tk.Frame(box,bg=LIFT);actions.pack(anchor="w",padx=21,pady=(0,22))
