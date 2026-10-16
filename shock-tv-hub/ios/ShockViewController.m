@@ -570,6 +570,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (void)loadCategory:(NSString *)tag {
     self.mode=@"catalog";
     NSInteger generation=++self.taskGeneration;
+    if(![tag isEqualToString:@"Canais ao vivo"]&&self.liveSelection)[self stopLivePreview];
     [self.catalogItems removeAllObjects];
     [self refreshList];
     self.status.text=[NSString stringWithFormat:@"Buscando %@ nos addons...",tag];
@@ -613,7 +614,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                         NSDictionary *media=[self mediaFrom:raw type:kind base:base];
                         if(media){
                             NSMutableDictionary *display=[media mutableCopy];
-                            if(live){display[@"_kind"]=@"tv";display[@"type"]=kind;}
+                            if(live){display[@"_kind"]=@"tv";display[@"type"]=kind;display[@"_group"]=catName;}
                             else if(custom){
                                 display[@"type"]=kind; // Use manifest type for /stream and /meta URLs.
                                 display[@"_kind"]=[[self str:cat[@"id"]].lowercaseString containsString:@"series"]?@"series":@"movie";
@@ -902,6 +903,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     [self.table reloadData];
     [self.posterGrid reloadData];
     [self refreshHero];
+    [self updateLiveGuide];
 }
 - (void)searchBar:(UISearchBar *)bar textDidChange:(NSString *)text {
     self.currentTerm = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
@@ -1046,9 +1048,30 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 
 - (NSInteger)tableView:(UITableView *)table numberOfRowsInSection:(NSInteger)section {
+    if(table==self.liveGroups)return (NSInteger)self.liveGroupNames.count;
+    if(table==self.liveChannels)return (NSInteger)self.liveFiltered.count;
     return (NSInteger)self.results.count;
 }
 - (UITableViewCell *)tableView:(UITableView *)table cellForRowAtIndexPath:(NSIndexPath *)path {
+    if(table==self.liveGroups||table==self.liveChannels){
+        BOOL group=(table==self.liveGroups);
+        static NSString *identifier=@"telares.guide";
+        UITableViewCell *cell=[table dequeueReusableCellWithIdentifier:identifier];
+        if(!cell)cell=[[UITableViewCell alloc]initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
+        NSDictionary *channel=group?nil:self.liveFiltered[(NSUInteger)path.row];
+        NSString *name=group?self.liveGroupNames[(NSUInteger)path.row]:[self str:channel[@"name"]];
+        cell.textLabel.text=name;
+        cell.textLabel.textColor=[UIColor whiteColor];
+        cell.textLabel.font=[UIFont boldSystemFontOfSize:15];
+        cell.detailTextLabel.text=group?@"":[self str:channel[@"_group"]];
+        cell.detailTextLabel.textColor=[UIColor colorWithWhite:.72 alpha:1];
+        BOOL selected=group?[name isEqualToString:self.liveGroup]:
+             [[self keyFor:channel] isEqualToString:[self keyFor:self.liveSelection]];
+        cell.backgroundColor=selected?[UIColor colorWithRed:.13 green:.37 blue:.48 alpha:1]:
+             [UIColor colorWithRed:.08 green:.15 blue:.22 alpha:1];
+        cell.selectionStyle=UITableViewCellSelectionStyleNone;
+        return cell;
+    }
     static NSString *identifier=@"shock.media";
     UITableViewCell *cell=[table dequeueReusableCellWithIdentifier:identifier];
     if(!cell)cell=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
@@ -1076,6 +1099,13 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)tableView:(UITableView *)table didSelectRowAtIndexPath:(NSIndexPath *)path {
     [table deselectRowAtIndexPath:path animated:YES];
+    if(table==self.liveGroups){
+        self.liveGroup=self.liveGroupNames[(NSUInteger)path.row];[self updateLiveGuide];return;
+    }
+    if(table==self.liveChannels){
+        NSDictionary *channel=self.liveFiltered[(NSUInteger)path.row];
+        [self playLiveSelection:channel];[self.liveChannels reloadData];return;
+    }
     NSDictionary *item=[self dict:self.results[(NSUInteger)path.row]];
     if([self.mode isEqualToString:@"streams"]){[self playStream:item];return;}
     if([self.mode isEqualToString:@"episodes"]){
@@ -1176,6 +1206,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)checkStreamSources:(NSArray *)all index:(NSUInteger)index item:(NSDictionary *)item
                       type:(NSString *)type identifier:(NSString *)ident found:(NSMutableArray *)found {
+    if(item!=self.selectedMedia)return;
     if(index>=all.count){
         if(!found.count){
             [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Opções BitTorrent não são reproduzidas diretamente no iPad."];
@@ -1186,6 +1217,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     NSString *source=[self str:all[index]];
     [self manifest:source done:^(NSDictionary *manifest){
+        if(item!=self.selectedMedia)return;
         if(![self manifest:manifest resource:@"stream" type:type identifier:ident]){
             [self checkStreamSources:all index:index+1 item:item type:type identifier:ident found:found];
             return;
@@ -1194,6 +1226,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         NSString *endpoint=[NSString stringWithFormat:@"%@stream/%@/%@.json",
             base,[self pathEncode:type],[self pathEncode:ident]];
         [self requestJSON:endpoint complete:^(NSDictionary *payload,NSError *error){
+            if(item!=self.selectedMedia)return;
             if(!error)for(NSDictionary *stream in [self arr:payload[@"streams"]]){
                 NSString *link=[self str:stream[@"url"]];
                 NSURL *url=[NSURL URLWithString:link];
@@ -1338,14 +1371,25 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(!self.playerController){
         self.playerController=[[AVPlayerViewController alloc]init];
         self.playerController.showsPlaybackControls=YES;
-        // The native iPad player remains clean; automatic source failover stays active.
-        __weak ShockViewController *weakSelf=self;
-        [self presentViewController:self.playerController animated:YES completion:^{
-            ShockViewController *strong=weakSelf;
-            if(strong&&strong.moviePlayer)[strong.moviePlayer play];
-        }];
+        if(live&&[self showingLiveGuide]){
+            [self addChildViewController:self.playerController];
+            self.playerController.view.frame=self.liveScreen.bounds;
+            self.playerController.view.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+            [self.liveScreen addSubview:self.playerController.view];
+            [self.playerController didMoveToParentViewController:self];
+        }else{
+            __weak ShockViewController *weakSelf=self;
+            [self presentViewController:self.playerController animated:YES completion:^{
+                ShockViewController *strong=weakSelf;
+                if(strong&&strong.moviePlayer)[strong.moviePlayer play];
+            }];
+        }
     }
     self.playerController.player=self.moviePlayer;
+    if(live&&[self showingLiveGuide]){
+        self.liveMessage.text=@"Conectando à transmissão...";
+        self.liveFullscreen.hidden=NO;
+    }
     [self.moviePlayer play];
 }
 - (void)installSourceControl {
