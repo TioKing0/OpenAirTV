@@ -88,7 +88,7 @@
 
     self.playButton=[self button:@"▶  Assistir" action:@selector(play) strong:YES];
     self.likeButton=[self button:@"" action:@selector(like) strong:NO];
-    self.laterButton=[self button:@"" action:@selector(later) strong:NO];
+    self.laterButton=[self button:@"" action:@selector(toggleLater) strong:NO];
     [self.scroll addSubview:self.playButton];
     [self.scroll addSubview:self.likeButton];
     [self.scroll addSubview:self.laterButton];
@@ -143,5 +143,5 @@
 - (void)close{[self dismissViewControllerAnimated:YES completion:nil];}
 - (void)play{if(self.onPlay)self.onPlay();}
 - (void)like{self.liked=!self.liked;[self updateActions];if(self.onLike)self.onLike();}
-- (void)later{self.later=!self.later;[self updateActions];if(self.onLater)self.onLater();}
+- (void)toggleLater{self.later=!self.later;[self updateActions];if(self.onLater)self.onLater();}
 @end
