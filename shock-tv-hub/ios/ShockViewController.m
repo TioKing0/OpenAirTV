@@ -98,6 +98,9 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,copy) NSString *mode;
 @property(nonatomic,copy) NSString *currentTerm;
 @property(nonatomic,strong) NSDictionary *activeSeries;
+@property(nonatomic,strong) NSArray *allSeriesEpisodes;
+@property(nonatomic,strong) NSArray *episodeSeasonOptions;
+@property(nonatomic,strong) NSNumber *selectedEpisodeSeason;
 @property(nonatomic,strong) AVPlayer *moviePlayer;
 @property(nonatomic,strong) AVPlayerViewController *playerController;
 @property(nonatomic,strong) id timeObserver;
@@ -1147,6 +1150,40 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     navigation.modalPresentationStyle=UIModalPresentationFullScreen;
     [self presentViewController:navigation animated:YES completion:nil];
 }
+- (void)showSeasonSelector {
+    if(![self.mode isEqualToString:@"episodes"]||!self.episodeSeasonOptions.count)return;
+    UIAlertController *chooser=[UIAlertController alertControllerWithTitle:@"Escolher temporada"
+       message:@"Selecione uma temporada para visualizar somente seus episódios."
+       preferredStyle:UIAlertControllerStyleActionSheet];
+    for(NSNumber *number in self.episodeSeasonOptions){
+        NSInteger season=[number integerValue];
+        NSString *name=season<0?@"Episódios sem temporada":
+                       season==0?@"Especiais": [NSString stringWithFormat:@"Temporada %ld",(long)season];
+        [chooser addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDefault
+          handler:^(UIAlertAction *action){[self selectSeason:number];}]];
+    }
+    [chooser addAction:[UIAlertAction actionWithTitle:@"Cancelar" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover=chooser.popoverPresentationController;
+    if(popover){popover.barButtonItem=self.navigationItem.rightBarButtonItem;}
+    [self presentViewController:chooser animated:YES completion:nil];
+}
+- (void)selectSeason:(NSNumber *)season {
+    self.selectedEpisodeSeason=season;
+    [self.results removeAllObjects];
+    for(NSDictionary *ep in self.allSeriesEpisodes){
+        NSInteger value=ep[@"season"]&&ep[@"season"]!=[NSNull null]?
+            [ep[@"season"] integerValue]:-1;
+        if(value==[season integerValue])[self.results addObject:ep];
+    }
+    [self.table reloadData];
+    NSString *label=[season integerValue]<0?@"Episódios":
+        [season integerValue]==0?@"Especiais":
+        [NSString stringWithFormat:@"Temporada %@",season];
+    self.title=label;
+    self.status.text=[NSString stringWithFormat:@"%@ · %lu episódios",
+        label,(unsigned long)self.results.count];
+    [self.table setContentOffset:CGPointZero animated:NO];
+}
 - (void)resolveEpisodes:(NSDictionary *)series {
     self.activeSeries=series;
     self.status.text=@"Consultando metadados dos episódios...";
@@ -1180,13 +1217,27 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 NSInteger ea=[a[@"episode"] integerValue],eb=[b[@"episode"] integerValue];
                 return ea<eb?NSOrderedAscending:ea>eb?NSOrderedDescending:NSOrderedSame;
             }];
+            // Keep the full episode list, but render only one season at a time.
+            self.allSeriesEpisodes=[self.results copy];
+            NSMutableSet *distinct=[NSMutableSet set];
+            for(NSDictionary *episode in self.allSeriesEpisodes){
+                NSInteger n=(episode[@"season"]&&episode[@"season"]!=[NSNull null])?
+                   [episode[@"season"] integerValue]:-1;
+                [distinct addObject:@(n)];
+            }
+            self.episodeSeasonOptions=[[distinct allObjects] sortedArrayUsingSelector:@selector(compare:)];
             self.mode=@"episodes";
-            self.title=@"Episódios";
             [self.view setNeedsLayout];
             self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:@"Voltar"
                 style:UIBarButtonItemStylePlain target:self action:@selector(exitSpecialList)];
-            self.status.text=[NSString stringWithFormat:@"%lu episódios encontrados",(unsigned long)self.results.count];
-            [self.table reloadData];
+            self.navigationItem.rightBarButtonItem=self.episodeSeasonOptions.count>1?
+                [[UIBarButtonItem alloc]initWithTitle:@"Temporadas"
+                style:UIBarButtonItemStylePlain target:self action:@selector(showSeasonSelector)]:nil;
+            NSNumber *defaultSeason=nil;
+            for(NSNumber *n in self.episodeSeasonOptions)
+                if([n integerValue]>0){defaultSeason=n;break;}
+            if(!defaultSeason)defaultSeason=[self.episodeSeasonOptions firstObject];
+            if(defaultSeason)[self selectSeason:defaultSeason];
         }];
     }];
 }
@@ -1258,6 +1309,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     [self.view setNeedsLayout];
     self.navigationItem.leftBarButtonItem=nil;
     self.activeSeries=nil;
+    self.allSeriesEpisodes=nil;
+    self.episodeSeasonOptions=nil;
+    self.selectedEpisodeSeason=nil;
+    self.navigationItem.rightBarButtonItem=nil;
     if(self.currentTerm.length>=2)[self beginSearch];
     else [self loadCatalogs];
 }
