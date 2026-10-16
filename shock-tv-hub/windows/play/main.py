@@ -110,7 +110,7 @@ class TelaresPlay:
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
-        self.label(self.nav,"v0.2.0 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
+        self.label(self.nav,"v0.2.1 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
         self.right=tk.Frame(self.root,bg=BG)
         self.right.pack(side="left",fill="both",expand=True)
         bar=tk.Frame(self.right,bg=BG,height=78)
@@ -163,7 +163,7 @@ class TelaresPlay:
         self.label(panel,"Escolha um catálogo ou gênero",20,WHITE,True).pack(anchor="w",padx=28,pady=(22,13))
         for name in catalog.CATEGORY_OPTIONS:
             self.btn(panel,name,lambda tag=name:self.select_category(tag),PANEL,padx=20,pady=13).pack(anchor="w",fill="x",padx=28,pady=5)
-        self.label(panel,"Plataformas: títulos identificados pelos addons. Não confirma assinatura ou disponibilidade no Brasil.",
+        self.label(panel,"Esses filtros complementam Filmes e Séries. Plataformas: catálogos dos addons, sem confirmar disponibilidade no Brasil.",
             11,MUTED,wraplength=720).pack(anchor="w",padx=28,pady=18)
 
     def select_category(self,tag):
@@ -180,9 +180,7 @@ class TelaresPlay:
             self.render_grid()
             self.status_set(str(len(items))+" títulos • "+tag+" • classificação baseada nos addons")
             if not items:
-                self.label(self.stage.winfo_children()[0].winfo_children()[0],
-                    "Nenhum addon configurado declarou títulos para "+tag+". Adicione um catálogo compatível em Fontes.",
-                    12,MUTED,wraplength=700).pack(anchor="w",padx=24,pady=8)
+                self.status_set("Nenhum catálogo conectado declarou títulos para "+tag+". Filmes e Séries continuam disponíveis; adicione um addon compatível em Fontes.")
         self.job(lambda:catalog.discover(self.addons,category=tag),done,
                  lambda reason:self.status_set("Erro ao consultar "+tag+": "+reason))
 

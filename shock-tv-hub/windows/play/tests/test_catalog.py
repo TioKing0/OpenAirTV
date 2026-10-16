@@ -41,4 +41,20 @@ class CatalogTest(unittest.TestCase):
         self.assertIn("Max / HBO", catalog.category_of("HBO Series","Addon",[],"hbo"))
         self.assertEqual(catalog.category_of("Top movies","Cinemeta",[],"top"),set())
 
+    def test_extra_genres(self):
+        for label,genre in [("Documentários","Documentary"),("Terror","Horror"),("Comédia","Comedy"),("Ficção científica","Sci-Fi")]:
+            self.assertIn(label,catalog.category_of("Top","Addon",[genre],"featured"))
+        self.assertNotIn("Anime",catalog.category_of("Top","Addon",["Animation"],"featured"))
+    def test_extra_platforms(self):
+        for label,name in {"Prime Video":"Amazon Prime Video","Apple TV+":"Apple TV+","Paramount+":"Paramount Plus","Crunchyroll":"Crunchyroll"}.items():
+            self.assertIn(label,catalog.category_of(name,"Addon",[],"top"))
+        self.assertNotIn("Prime Video",catalog.category_of("Top","Cinemeta",[],"top"))
+    def test_declared_genre_option(self):
+        options={"extra":[{"name":"genre","options":["Documentary","Sci-Fi","Horror","Comedy"]}]}
+        for label in ("Documentários","Ficção científica","Terror","Comédia"):
+            self.assertTrue(catalog.declared_genre(options,label).startswith("/genre="))
+    def test_existing_categories_kept(self):
+        self.assertEqual({"Anime","Netflix","Max / HBO","Disney+"}.difference(catalog.CATEGORY_OPTIONS),set())
+        self.assertEqual({"Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"}.difference(catalog.CATEGORY_OPTIONS),set())
+
 if __name__=="__main__":unittest.main()

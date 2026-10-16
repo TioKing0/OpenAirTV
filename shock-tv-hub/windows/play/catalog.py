@@ -54,24 +54,37 @@ def unique(items):
             used.add(k);out.append(x)
     return out
 
-CATEGORY_OPTIONS = ("Anime", "Netflix", "Max / HBO", "Disney+")
+import unicodedata
+
+CATEGORY_OPTIONS = ["Anime","Netflix","Max / HBO","Disney+","Prime Video","Apple TV+","Paramount+","Crunchyroll","Documentários","Terror","Comédia","Ficção científica"]
+GENRE_ALIASES = {"Anime":["anime","japanese animation","animacao japonesa"],"Documentários":["documentario","documentary","documentaries","documental"],"Terror":["terror","horror"],"Comédia":["comedia","comedy"],"Ficção científica":["ficcao cientifica","science fiction","sci fi","scifi","sci-fi","science-fiction"]}
+PLATFORM_ALIASES = {"Netflix":["netflix"],"Max / HBO":["hbo","hbomax","hbo max","max originals","max catalog","max tv"],"Disney+":["disney+","disney plus","disneyplus"],"Prime Video":["prime video","primevideo","amazon prime"],"Apple TV+":["apple tv+","apple tv plus","appletv+","apple originals"],"Paramount+":["paramount+","paramount plus","paramountplus"],"Crunchyroll":["crunchyroll"]}
+
+def normalized(value):
+    text=unicodedata.normalize("NFKD",str(value or "").lower())
+    text="".join(c for c in text if not unicodedata.combining(c))
+    return " ".join(text.replace("-", " ").replace("_"," ").split())
 
 def category_of(catalog_name="",provider="",genres=(),catalog_id=""):
-    """Classifies declared addon catalog provenance, not licensed streaming rights."""
-    origins = " ".join((str(catalog_name),str(provider),str(catalog_id))).lower()
-    declared = [str(x).lower() for x in (genres if isinstance(genres,list) else [])]
-    tags = set()
-    if any("anime" in x or "animação japonesa" in x or "japanese animation" in x for x in declared):
-        tags.add("Anime")
-    if "anime" in origins:
-        tags.add("Anime")
-    if "netflix" in origins:
-        tags.add("Netflix")
-    if any(x in origins for x in ("hbo", "max originals", "max catalog", "hbomax")):
-        tags.add("Max / HBO")
-    if any(x in origins for x in ("disney+", "disney plus", "disneyplus")):
-        tags.add("Disney+")
-    return tags
+    """Classifies addon declarations; does not assert official rights or regional availability."""
+    origin=normalized(" ".join((str(catalog_name),str(provider),str(catalog_id))))
+    genre_names=[normalized(x) for x in (genres if isinstance(genres,list) else [])]
+    result=set()
+    for category,words in GENRE_ALIASES.items():
+        probes=[normalized(x) for x in words]
+        if any(any(p in g for p in probes) for g in genre_names) or any(p in origin for p in probes):result.add(category)
+    for category,words in PLATFORM_ALIASES.items():
+        if any(normalized(w) in origin for w in words):result.add(category)
+    return result
+
+def declared_genre(cat,category):
+    words=[normalized(w) for w in GENRE_ALIASES.get(category,[])]
+    for entry in cat.get("extra",[]):
+        if not isinstance(entry,dict) or entry.get("name")!="genre":continue
+        for option in entry.get("options",[]):
+            if isinstance(option,str) and any(word in normalized(option) for word in words):
+                return "/genre="+enc(option)
+    return ""
 
 def discover(addons,term="",kind="all",category=""):
     term=term.strip()[:120]
@@ -86,15 +99,10 @@ def discover(addons,term="",kind="all",category=""):
             if not re.fullmatch("[A-Za-z0-9_.:-]{1,100}",ident):continue
             extras=cat.get("extra",[])
             if term and not any(e=="search" or isinstance(e,dict) and e.get("name")=="search" for e in extras):continue
-            genre_args=""
-            if category=="Anime" and not term:
-                for entry in extras:
-                    if not isinstance(entry,dict) or entry.get("name")!="genre":continue
-                    options=entry.get("options") or []
-                    matching=next((x for x in options if isinstance(x,str) and "anime" in x.lower()),None)
-                    if matching:
-                        genre_args="/genre="+enc(matching)
-                        break
+            provider=m.get("name","Addon")
+            catalog_name=cat.get("name",ident)
+            if category in PLATFORM_ALIASES and category not in category_of(catalog_name,provider,[],ident):continue
+            genre_args=declared_genre(cat,category) if category in GENRE_ALIASES and not term else ""
             extra="/search="+enc(term) if term else genre_args
             out.append((root+"catalog/"+enc(typ)+"/"+enc(ident)+extra+".json",typ,root,m.get("name","Addon"),cat.get("name",ident),ident, bool(genre_args)))
             if len(out)>=(5 if term else 3):break
@@ -113,8 +121,8 @@ def discover(addons,term="",kind="all",category=""):
                 for x in data[:32] if isinstance(data,list) else []:
                     if not isinstance(x,dict) or not isinstance(x.get("id"),str) or not isinstance(x.get("name"),str):continue
                     item=dict(x,type=x.get("type",typ),_base=root,_provider=provider,_catalog=catname)
-                    if by_genre:item["_queried_anime_genre"]=True
-                    if category and category not in category_of(catname,provider,x.get("genres",[]),catid) and not (category=="Anime" and by_genre):
+                    if by_genre:item["_queried_genre"]=category
+                    if category and category not in category_of(catname,provider,x.get("genres",[]),catid) and not by_genre:
                         continue
                     items.append(item)
             except Exception:pass
