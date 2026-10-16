@@ -20,15 +20,15 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --prefix=Shock-TV-Hub/ \
-            -o dist/Shock-TV-iPad-v0.2.0-SOURCE.zip HEAD:shock-tv-hub
-          unzip -t dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | tail -n 2
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
-          unzip -Z1 dist/Shock-TV-iPad-v0.2.0-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
+            -o dist/Shock-TV-iPad-v0.2.1-SOURCE.zip HEAD:shock-tv-hub
+          unzip -t dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | tail -n 2
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/android/app/build.gradle'
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/ios/Makefile'
+          unzip -Z1 dist/Shock-TV-iPad-v0.2.1-SOURCE.zip | grep -q 'Shock-TV-Hub/windows/main.py'
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-iPad-v0.2.0-Complete-Source-ZIP
-          path: dist/Shock-TV-iPad-v0.2.0-SOURCE.zip
+          name: Shock-TV-iPad-v0.2.1-Complete-Source-ZIP
+          path: dist/Shock-TV-iPad-v0.2.1-SOURCE.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -108,12 +108,12 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa Payload)
-          unzip -t dist/ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa Payload)
+          unzip -t dist/ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Shock-TV-iOS9-v0.2.0-ARMv7-IPA
-          path: dist/ShockTV-iPad-iOS9-v0.2.0-ARMv7.ipa
+          name: Shock-TV-iOS9-v0.2.1-ARMv7-IPA
+          path: dist/ShockTV-iPad-iOS9-v0.2.1-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30

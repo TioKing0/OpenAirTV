@@ -239,7 +239,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.table=[[UITableView alloc]initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.table.delegate=self;
     self.table.dataSource=self;
-    self.table.rowHeight=88;
+    self.table.rowHeight=76;
     self.table.hidden=YES;
     self.table.backgroundColor=[self dark];
     self.table.separatorColor=[UIColor colorWithWhite:.22 alpha:1];
@@ -749,27 +749,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     cell.detailTextLabel.numberOfLines=2;
     cell.backgroundColor=[self dark];
     cell.accessoryType=UITableViewCellAccessoryDisclosureIndicator;
-    cell.imageView.image=nil;
-    NSString *url=[self str:item[@"poster"]];
-    if (url.length && ![self.mode isEqualToString:@"streams"]){
-        UIImage *cached=self.posterCache[url];
-        if(cached)cell.imageView.image=cached;
-        else if([url hasPrefix:@"https://"]){
-            NSURL *imageURL=[NSURL URLWithString:url];
-            NSURLSessionDataTask *task=[[NSURLSession sharedSession]
-                dataTaskWithURL:imageURL completionHandler:^(NSData *data,NSURLResponse *response,NSError *error) {
-                    if (error||data.length>1800000)return;
-                    UIImage *img=[UIImage imageWithData:data];
-                    if(!img)return;
-                    dispatch_async(dispatch_get_main_queue(),^{
-                        if(self.posterCache.count>40)[self.posterCache removeAllObjects];
-                        self.posterCache[url]=img;
-                        [self.table reloadRowsAtIndexPaths:@[path] withRowAnimation:UITableViewRowAnimationNone];
-                    });
-                }];
-            [task resume];
-        }
-    }
+    // Text-only series and source lists avoid decoding large poster JPEGs.\n    cell.imageView.image=nil;
     return cell;
 }
 - (void)tableView:(UITableView *)table didSelectRowAtIndexPath:(NSIndexPath *)path {
@@ -961,6 +941,8 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         @catch(NSException *ignored){}
         self.hasPlayerObservation=NO;
     }
+    if(self.observedPlayerItem)
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:nil object:self.observedPlayerItem];
     self.observedPlayerItem=nil;
     [self.moviePlayer pause];
     if(self.playerController)self.playerController.player=nil;
@@ -988,6 +970,10 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         context:kShockPlayerItemStatusContext];
     self.hasPlayerObservation=YES;
     self.moviePlayer=[AVPlayer playerWithPlayerItem:playerItem];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemFailed:)
+        name:AVPlayerItemFailedToPlayToEndTimeNotification object:playerItem];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemStalled:)
+        name:AVPlayerItemPlaybackStalledNotification object:playerItem];
     if(!self.playerController){
         self.playerController=[[AVPlayerViewController alloc]init];
         self.playerController.showsPlaybackControls=YES;
@@ -1077,6 +1063,22 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         [self tryNextPlaybackSource];
     }
 }
+- (void)playerItemFailed:(NSNotification *)note {
+    if(note.object==self.observedPlayerItem&&!self.closingPlayer)
+        [self tryNextPlaybackSource];
+}
+- (void)playerItemStalled:(NSNotification *)note {
+    if(note.object!=self.observedPlayerItem||self.closingPlayer)return;
+    AVPlayerItem *stalled=self.observedPlayerItem;
+    __weak ShockViewController *weakSelf=self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(18*NSEC_PER_SEC)),
+       dispatch_get_main_queue(),^{
+         ShockViewController *strong=weakSelf;
+         if(!strong||strong.closingPlayer||strong.observedPlayerItem!=stalled)return;
+         if(strong.moviePlayer.rate<=0&&stalled.playbackBufferEmpty)
+             [strong tryNextPlaybackSource];
+       });
+}
 - (void)tryNextPlaybackSource {
     if(self.closingPlayer)return;
     [self saveCurrentPosition];
@@ -1162,6 +1164,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 - (void)dealloc {
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(beginSearch) object:nil];
     [self.streamChecker cancel];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self cleanCurrentPlayer];
 }
 - (BOOL)prefersStatusBarHidden{return YES;}

@@ -1,5 +1,6 @@
 #import "ShockDetailViewController.h"
 #import <QuartzCore/QuartzCore.h>
+#import <ImageIO/ImageIO.h>
 
 @interface ShockDetailViewController ()
 @property(nonatomic,strong) NSDictionary *media;
@@ -98,11 +99,24 @@
         __weak ShockDetailViewController *weakSelf=self;
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:url]
             completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
-                if(error||data.length>1600000||data.length==0)return;
-                UIImage *image=[UIImage imageWithData:data];
-                if(image)dispatch_async(dispatch_get_main_queue(),^{
-                    weakSelf.poster.image=image;
-                });
+                if(error||data.length>1100000||data.length<100)return;
+                CGImageSourceRef imageSource=CGImageSourceCreateWithData((__bridge CFDataRef)data,NULL);
+                if(!imageSource)return;
+                NSDictionary *options=@{
+                    (id)kCGImageSourceCreateThumbnailFromImageAlways:@YES,
+                    (id)kCGImageSourceShouldCache:@NO,
+                    (id)kCGImageSourceThumbnailMaxPixelSize:@460
+                };
+                CGImageRef icon=CGImageSourceCreateThumbnailAtIndex(imageSource,0,
+                    (__bridge CFDictionaryRef)options);
+                CFRelease(imageSource);
+                if(icon){
+                    UIImage *image=[UIImage imageWithCGImage:icon];
+                    CGImageRelease(icon);
+                    dispatch_async(dispatch_get_main_queue(),^{
+                        if(weakSelf.view.window)weakSelf.poster.image=image;
+                    });
+                }
             }] resume];
     }
 }

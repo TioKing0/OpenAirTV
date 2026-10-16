@@ -6,8 +6,8 @@
  <key>CFBundleDisplayName</key><string>Shock TV</string>
  <key>CFBundleName</key><string>ShockTV</string>
  <key>CFBundlePackageType</key><string>APPL</string>
- <key>CFBundleVersion</key><string>2</string>
- <key>CFBundleShortVersionString</key><string>0.2.0</string>
+ <key>CFBundleVersion</key><string>3</string>
+ <key>CFBundleShortVersionString</key><string>0.2.1</string>
  <key>CFBundleDevelopmentRegion</key><string>pt_BR</string>
  <key>LSRequiresIPhoneOS</key><true/>
  <key>MinimumOSVersion</key><string>9.0</string>
