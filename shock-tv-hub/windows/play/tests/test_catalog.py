@@ -158,7 +158,10 @@ class CatalogTest(unittest.TestCase):
             self.assertNotIn('@"Shock TV"',text)
             self.assertNotIn('Choque TV',text)
         self.assertIn('alertControllerWithTitle:@"Telares Play"',ios)
-        self.assertIn('setTitle("Telares TV")',android.replace('.setTitle("Telares TV")','.setTitle("Telares TV")'))
+        self.assertIn('BuildConfig.MOBILE_UI?"Telares Play":"Telares TV"',android)
+        self.assertIn('BuildConfig.MOBILE_UI',android)
+        mobile=(root/"android/app/src/mobile/res/values/strings.xml").read_text(encoding="utf-8")
+        self.assertIn('Telares Play',mobile)
     def test_live_recovers_without_preflight_on_ipad(self):
         root=pathlib.Path(__file__).resolve().parents[3]
         ios=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
