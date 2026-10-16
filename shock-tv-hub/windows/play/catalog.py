@@ -54,7 +54,26 @@ def unique(items):
             used.add(k);out.append(x)
     return out
 
-def discover(addons,term="",kind="all"):
+CATEGORY_OPTIONS = ("Anime", "Netflix", "Max / HBO", "Disney+")
+
+def category_of(catalog_name="",provider="",genres=(),catalog_id=""):
+    """Classifies declared addon catalog provenance, not licensed streaming rights."""
+    origins = " ".join((str(catalog_name),str(provider),str(catalog_id))).lower()
+    declared = [str(x).lower() for x in (genres if isinstance(genres,list) else [])]
+    tags = set()
+    if any("anime" in x or "animação japonesa" in x or "japanese animation" in x for x in declared):
+        tags.add("Anime")
+    if "anime" in origins:
+        tags.add("Anime")
+    if "netflix" in origins:
+        tags.add("Netflix")
+    if any(x in origins for x in ("hbo", "max originals", "max catalog", "hbomax")):
+        tags.add("Max / HBO")
+    if any(x in origins for x in ("disney+", "disney plus", "disneyplus")):
+        tags.add("Disney+")
+    return tags
+
+def discover(addons,term="",kind="all",category=""):
     term=term.strip()[:120]
     tasks=[]
     def catalogs(url):
@@ -65,9 +84,19 @@ def discover(addons,term="",kind="all"):
             if typ not in ("movie","series") or not isinstance(ident,str): continue
             if kind!="all" and kind!=typ: continue
             if not re.fullmatch("[A-Za-z0-9_.:-]{1,100}",ident):continue
-            if term and not any(e=="search" or isinstance(e,dict) and e.get("name")=="search" for e in cat.get("extra",[])):continue
-            extra="/search="+enc(term) if term else ""
-            out.append((root+"catalog/"+enc(typ)+"/"+enc(ident)+extra+".json",typ,root,m.get("name","Addon")))
+            extras=cat.get("extra",[])
+            if term and not any(e=="search" or isinstance(e,dict) and e.get("name")=="search" for e in extras):continue
+            genre_args=""
+            if category=="Anime" and not term:
+                for entry in extras:
+                    if not isinstance(entry,dict) or entry.get("name")!="genre":continue
+                    options=entry.get("options") or []
+                    matching=next((x for x in options if isinstance(x,str) and "anime" in x.lower()),None)
+                    if matching:
+                        genre_args="/genre="+enc(matching)
+                        break
+            extra="/search="+enc(term) if term else genre_args
+            out.append((root+"catalog/"+enc(typ)+"/"+enc(ident)+extra+".json",typ,root,m.get("name","Addon"),cat.get("name",ident),ident, bool(genre_args)))
             if len(out)>=(5 if term else 3):break
         return out
     with futures.ThreadPoolExecutor(max_workers=6) as pool:
@@ -75,15 +104,19 @@ def discover(addons,term="",kind="all"):
         for f in futures.as_completed(mfs):
             try:tasks.extend(f.result())
             except Exception:pass
-        fs={pool.submit(get_json,url): (typ,root,provider) for url,typ,root,provider in tasks[:85]}
+        fs={pool.submit(get_json,url): (typ,root,provider,catname,catid,by_genre) for url,typ,root,provider,catname,catid,by_genre in tasks[:85]}
         items=[]
         for f in futures.as_completed(fs):
-            typ,root,provider=fs[f]
+            typ,root,provider,catname,catid,by_genre=fs[f]
             try:
                 data=f.result().get("metas",[])
                 for x in data[:32] if isinstance(data,list) else []:
                     if not isinstance(x,dict) or not isinstance(x.get("id"),str) or not isinstance(x.get("name"),str):continue
-                    items.append(dict(x,type=x.get("type",typ),_base=root,_provider=provider))
+                    item=dict(x,type=x.get("type",typ),_base=root,_provider=provider,_catalog=catname)
+                    if by_genre:item["_queried_anime_genre"]=True
+                    if category and category not in category_of(catname,provider,x.get("genres",[]),catid) and not (category=="Anime" and by_genre):
+                        continue
+                    items.append(item)
             except Exception:pass
     items=unique(items)
     if term:

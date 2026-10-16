@@ -30,4 +30,15 @@ class CatalogTest(unittest.TestCase):
         with patch.object(catalog,"manifest",return_value=doc),patch.object(catalog,"get_json",side_effect=fake_json):
             items=catalog.discover(["https://example.com/manifest.json"],"Teste")
         self.assertEqual([x["name"] for x in items],["Teste"])
+
+    def test_anime_requires_explicit_genre_or_catalog(self):
+        self.assertIn("Anime", catalog.category_of("Anime HD","Cinemeta",[],"top"))
+        self.assertIn("Anime", catalog.category_of("Top","Cinemeta",["Action","Anime"],"top"))
+        self.assertNotIn("Anime", catalog.category_of("Animation", "Generic", ["Animation"], "top"))
+    def test_platforms_use_addon_provenance_not_title(self):
+        self.assertIn("Netflix", catalog.category_of("Netflix Movies","Addon",[],"netflix"))
+        self.assertIn("Disney+", catalog.category_of("Disney Plus","Addon",[],"disney"))
+        self.assertIn("Max / HBO", catalog.category_of("HBO Series","Addon",[],"hbo"))
+        self.assertEqual(catalog.category_of("Top movies","Cinemeta",[],"top"),set())
+
 if __name__=="__main__":unittest.main()

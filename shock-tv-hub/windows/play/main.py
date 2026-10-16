@@ -106,7 +106,7 @@ class TelaresPlay:
         self.label(self.nav,"TELARES",24,CYAN,True,bg=PANEL).pack(anchor="w",padx=25,pady=(28,0))
         self.label(self.nav,"P L A Y    •    WINDOWS",10,MUTED,bg=PANEL).pack(anchor="w",padx=26,pady=(0,26))
         self.nav_buttons={}
-        for label in ("Início","Filmes","Séries","Buscar","Continuar assistindo","Minha lista","Fontes"):
+        for label in ("Início","Filmes","Séries","Buscar","Categorias","Continuar assistindo","Minha lista","Fontes"):
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
@@ -140,6 +140,7 @@ class TelaresPlay:
 
     def open_section(self,label):
         if label=="Fontes":self.sources_dialog();return
+        if label=="Categorias":self.show_categories();return
         if label=="Buscar":self.focus_search();return
         if self.playing:self.exit_player()
         self.section=label;self.detail=None
@@ -154,6 +155,36 @@ class TelaresPlay:
             self.results.sort(key=lambda x:x.get("updated",0),reverse=True)
             self.render_grid()
         else:self.reload()
+
+    def show_categories(self):
+        if self.playing:self.exit_player()
+        self.heading.config(text="Explorar categorias")
+        panel=self.scroll_frame()
+        self.label(panel,"Escolha um catálogo ou gênero",20,WHITE,True).pack(anchor="w",padx=28,pady=(22,13))
+        for name in catalog.CATEGORY_OPTIONS:
+            self.btn(panel,name,lambda tag=name:self.select_category(tag),PANEL,padx=20,pady=13).pack(anchor="w",fill="x",padx=28,pady=5)
+        self.label(panel,"Plataformas: títulos identificados pelos addons. Não confirma assinatura ou disponibilidade no Brasil.",
+            11,MUTED,wraplength=720).pack(anchor="w",padx=28,pady=18)
+
+    def select_category(self,tag):
+        self.section="Categorias"
+        self.heading.config(text=tag)
+        self.req+=1
+        seq=self.req
+        self.results=[]
+        self.render_grid()
+        self.status_set("Consultando catálogos de "+tag+"...")
+        def done(items):
+            if seq!=self.req or self.playing:return
+            self.results=items
+            self.render_grid()
+            self.status_set(str(len(items))+" títulos • "+tag+" • classificação baseada nos addons")
+            if not items:
+                self.label(self.stage.winfo_children()[0].winfo_children()[0],
+                    "Nenhum addon configurado declarou títulos para "+tag+". Adicione um catálogo compatível em Fontes.",
+                    12,MUTED,wraplength=700).pack(anchor="w",padx=24,pady=8)
+        self.job(lambda:catalog.discover(self.addons,category=tag),done,
+                 lambda reason:self.status_set("Erro ao consultar "+tag+": "+reason))
 
     def focus_search(self):
         self.search_entry.focus_set()
