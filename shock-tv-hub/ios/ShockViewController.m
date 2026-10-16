@@ -527,7 +527,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 }
 - (void)refreshList {
     if ([self.mode isEqualToString:@"episodes"] || [self.mode isEqualToString:@"streams"]){
-        [self.table reloadData];return;
+        [self.table reloadData];[self.view setNeedsLayout];return;
     }
     [self.results removeAllObjects];
     NSArray *items = self.currentTerm.length>=2 ? self.catalogItems : self.catalogItems;
@@ -549,6 +549,8 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     self.status.text = [NSString stringWithFormat:@"%lu título(s) • iPad iOS 9 • mídia HTTP/HLS",
                         (unsigned long)self.results.count];
     [self.table reloadData];
+    [self.posterGrid reloadData];
+    [self refreshHero];
 }
 - (void)searchBar:(UISearchBar *)bar textDidChange:(NSString *)text {
     self.currentTerm = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
@@ -650,6 +652,46 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
+
+#pragma mark - Native iPad poster grid
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    if(![self.mode isEqualToString:@"catalog"])return 0;
+    NSUInteger total=self.results.count;
+    BOOL hasHero=[self.filter isEqualToString:@"Início"]&&!self.searching&&total>0;
+    return (NSInteger)(hasHero?total-1:total);
+}
+- (NSDictionary *)mediaAtIndex:(NSInteger)index {
+    NSInteger offset=[self.filter isEqualToString:@"Início"]&&!self.searching&&self.results.count>0?1:0;
+    NSInteger selected=index+offset;
+    if(selected<0||selected>=self.results.count)return nil;
+    return [self dict:self.results[(NSUInteger)selected]];
+}
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)layout
+    sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    CGFloat available=self.view.bounds.size.width-38;
+    NSInteger cols=self.view.bounds.size.width>self.view.bounds.size.height?5:3;
+    CGFloat gap=14;
+    CGFloat width=floor((available-(cols-1)*gap-22)/cols);
+    return CGSizeMake(width,MIN(260,width*1.31+48));
+}
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
+    cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    ShockPosterCell *cell=[collectionView dequeueReusableCellWithReuseIdentifier:@"shock.card"
+        forIndexPath:indexPath];
+    NSDictionary *item=[self mediaAtIndex:indexPath.item];
+    cell.caption.text=[self str:item[@"name"]];
+    cell.typeTag.text=[[self str:item[@"type"]] isEqualToString:@"series"]?@"SÉRIE":@"FILME";
+    cell.imageURL=[self str:item[@"poster"]];
+    cell.art.image=[self.imageCache objectForKey:cell.imageURL];
+    if(!cell.art.image)[self loadPoster:cell.imageURL into:cell.art];
+    return cell;
+}
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *item=[self mediaAtIndex:indexPath.item];
+    if(item)[self showDetails:item];
+}
+
 - (NSInteger)tableView:(UITableView *)table numberOfRowsInSection:(NSInteger)section {
     return (NSInteger)self.results.count;
 }
@@ -768,6 +810,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
             }];
             self.mode=@"episodes";
             self.title=@"Episódios";
+            [self.view setNeedsLayout];
             self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:@"Voltar"
                 style:UIBarButtonItemStylePlain target:self action:@selector(exitSpecialList)];
             self.status.text=[NSString stringWithFormat:@"%lu episódios encontrados",(unsigned long)self.results.count];
@@ -795,6 +838,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         [self.results addObjectsFromArray:found];
         self.mode=@"streams";
         self.title=@"Opções de reprodução";
+            [self.view setNeedsLayout];
         self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithTitle:@"Voltar"
             style:UIBarButtonItemStylePlain target:self action:@selector(exitSpecialList)];
         self.status.text=[NSString stringWithFormat:@"%lu fonte(s) HTTP(S)",(unsigned long)found.count];
@@ -837,6 +881,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 - (void)exitSpecialList {
     self.title=@"SHOCK TV";
     self.mode=@"catalog";
+    [self.view setNeedsLayout];
     self.navigationItem.leftBarButtonItem=nil;
     self.activeSeries=nil;
     if(self.currentTerm.length>=2)[self beginSearch];
