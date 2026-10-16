@@ -188,10 +188,23 @@ public final class MainActivity extends Activity {
     private void render() {
         showingDetails=false;
         LinearLayout shell=new LinearLayout(this);
-        shell.setOrientation(LinearLayout.HORIZONTAL);
+        shell.setOrientation(BuildConfig.MOBILE_UI?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         shell.setBackgroundColor(BG);
         shell.setFocusableInTouchMode(true);
 
+        if(BuildConfig.MOBILE_UI){
+            LinearLayout top=new LinearLayout(this);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.setPadding(dp(17),dp(9),dp(17),dp(7));
+            top.setBackgroundColor(0xff0b1926);
+            TextView brand=text("TELARES",22,AQUA,true);
+            brand.setLetterSpacing(.07f);
+            top.addView(brand,new LinearLayout.LayoutParams(0,dp(40),1f));
+            TextView hint=text("PLAY",11,0xffb9d6e4,true);
+            top.addView(hint);
+            shell.addView(top,new LinearLayout.LayoutParams(-1,dp(57)));
+            if(mobileWidthDp()>=700)addMobileTabletTabs(shell);
+        }else{
         LinearLayout sidebar=new LinearLayout(this);
         sidebar.setOrientation(LinearLayout.VERTICAL);
         sidebar.setPadding(dp(13),dp(26),dp(8),dp(15));
@@ -215,21 +228,26 @@ public final class MainActivity extends Activity {
         TextView foot=text("TELARES TV\nv"+BuildConfig.VERSION_NAME,11,0xff648397,false);
         sidebar.addView(foot);
 
+
+        }
         browseScroll=new ScrollView(this);
         browseScroll.setClipToPadding(false);
         browseScroll.setFillViewport(true);
         browseScroll.setVerticalScrollBarEnabled(false);
-        shell.addView(browseScroll,new LinearLayout.LayoutParams(0,-1,1f));
+        shell.addView(browseScroll,BuildConfig.MOBILE_UI?
+            new LinearLayout.LayoutParams(-1,0,1f):new LinearLayout.LayoutParams(0,-1,1f));
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(29),dp(24),dp(27),dp(65));
+        content.setPadding(dp(BuildConfig.MOBILE_UI?14:29),dp(BuildConfig.MOBILE_UI?14:24),
+            dp(BuildConfig.MOBILE_UI?14:27),dp(BuildConfig.MOBILE_UI?22:65));
         browseScroll.addView(content);
 
         LinearLayout toolbar=new LinearLayout(this);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.addView(text(sectionLabel(activeSection),22,Color.WHITE,true),
+        toolbar.addView(text(sectionLabel(activeSection),BuildConfig.MOBILE_UI?20:22,Color.WHITE,true),
                 new LinearLayout.LayoutParams(0,dp(44),1f));
-        toolbar.addView(text("SEU ENTRETENIMENTO",11,0xff8ca8b9,true));
+        if(!BuildConfig.MOBILE_UI||mobileWidthDp()>=700)
+            toolbar.addView(text("SEU ENTRETENIMENTO",11,0xff8ca8b9,true));
         content.addView(toolbar);
 
         spotlightHolder=new LinearLayout(this);
@@ -254,9 +272,68 @@ public final class MainActivity extends Activity {
             updateSpotlight();
             refreshCatalogRows();
         }
+        if(BuildConfig.MOBILE_UI&&mobileWidthDp()<700)addMobileBottomNavigation(shell);
         browseRoot=shell;
         setContentView(shell);
         browseScroll.post(()->browseScroll.scrollTo(0,0));
+    }
+
+    private int mobileWidthDp(){return getResources().getConfiguration().screenWidthDp;}
+    private void mobileNavigate(String route){
+        if("mais".equals(route)){
+            final String[] labels={"Buscar","Categorias","Minha lista","Fontes"};
+            new AlertDialog.Builder(this).setTitle("Telares Play")
+                .setItems(labels,(d,index)->{
+                    String choice=labels[index];
+                    if("Fontes".equals(choice)){showSources();return;}
+                    mobileNavigate("Buscar".equals(choice)?"buscar":
+                         "Categorias".equals(choice)?"categorias":"minha");
+                }).show();
+            return;
+        }
+        if("fontes".equals(route)){showSources();return;}
+        if(!route.equals(activeSection)){activeSection=route;render();}
+        else if("buscar".equals(route)&&searchField!=null)searchField.requestFocus();
+    }
+    private void addMobileBottomNavigation(LinearLayout shell){
+        LinearLayout bar=new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xff0c1c2a);
+        String[] routes={"inicio","filmes","series","aovivo","mais"};
+        String[] labels={"Início","Filmes","Séries","Ao vivo","Mais"};
+        for(int i=0;i<routes.length;i++){
+            final String destination=routes[i];
+            TextView item=text(labels[i],11,
+                activeSection.equals(destination)?AQUA:0xffa9c0cd,activeSection.equals(destination));
+            item.setGravity(Gravity.CENTER);
+            item.setMinimumHeight(dp(55));
+            item.setClickable(true);
+            item.setFocusable(true);
+            item.setOnClickListener(v->mobileNavigate(destination));
+            item.setContentDescription(labels[i]);
+            bar.addView(item,new LinearLayout.LayoutParams(0,dp(62),1f));
+        }
+        shell.addView(bar,new LinearLayout.LayoutParams(-1,dp(64)));
+    }
+    private void addMobileTabletTabs(LinearLayout shell){
+        HorizontalScrollView scroller=new HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        LinearLayout tabs=new LinearLayout(this);
+        tabs.setPadding(dp(9),dp(3),dp(9),dp(5));
+        tabs.setBackgroundColor(0xff0b1926);
+        String[] routes={"inicio","filmes","series","aovivo","minha","buscar","categorias","fontes"};
+        String[] titles={"Início","Filmes","Séries","Ao vivo","Minha lista","Buscar","Categorias","Fontes"};
+        for(int i=0;i<routes.length;i++){
+            final String route=routes[i];
+            Button b=button(titles[i],()->mobileNavigate(route));
+            b.setTextSize(12);
+            b.setMinHeight(dp(48));
+            b.setMinimumHeight(dp(48));
+            tabs.addView(b);
+        }
+        scroller.addView(tabs);
+        shell.addView(scroller,new LinearLayout.LayoutParams(-1,dp(63)));
     }
     private String sectionLabel(String key){
         if("filmes".equals(key))return "Filmes";
