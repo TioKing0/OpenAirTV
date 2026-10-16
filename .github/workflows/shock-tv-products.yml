@@ -34,12 +34,12 @@ jobs:
         with:
           gradle-version: "8.9"
       - name: Compile Telares TV
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleTvDebug
       - name: Verify APK
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+        run: test -s app/build/outputs/apk/tv/debug/app-tv-debug.apk
       - name: Verify Android TV launcher
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APK="app/build/outputs/apk/tv/debug/app-tv-debug.apk"
           AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
           if [ -z "$AAPT" ]; then echo "aapt not found"; exit 1; fi
           "$AAPT" dump badging "$APK" | tee /tmp/shock-tv-badging.txt
@@ -50,8 +50,8 @@ jobs:
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc7-APK
-          path: shock-tv-hub/android/app/build/outputs/apk/debug/app-debug.apk
+          name: Telares-TV-AndroidTV-v1.0.0-rc8-APK
+          path: shock-tv-hub/android/app/build/outputs/apk/tv/debug/app-tv-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -75,13 +75,75 @@ jobs:
           SHOCK_TV_SIGNING_STORE_PASSWORD: ${{ secrets.SHOCK_TV_STORE_PASSWORD }}
           SHOCK_TV_SIGNING_ALIAS: ${{ secrets.SHOCK_TV_KEY_ALIAS }}
           SHOCK_TV_SIGNING_KEY_PASSWORD: ${{ secrets.SHOCK_TV_KEY_PASSWORD }}
-        run: gradle --no-daemon :app:assembleRelease
+        run: gradle --no-daemon :app:assembleTvRelease
       - name: Publish updateable release APK
         if: env.SHOCK_RELEASE_READY == '1'
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc7-SIGNED
-          path: shock-tv-hub/android/app/build/outputs/apk/release/*.apk
+          name: Telares-TV-AndroidTV-v1.0.0-rc8-SIGNED
+          path: shock-tv-hub/android/app/build/outputs/apk/tv/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  android-mobile:
+    name: Telares Play Android Mobile APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: shock-tv-hub/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Compile Telares Play for phones and tablets
+        run: gradle --no-daemon :app:assembleMobileDebug
+      - name: Verify mobile APK, independent applicationId and Android launcher
+        run: |
+          APK="app/build/outputs/apk/mobile/debug/app-mobile-debug.apk"
+          test -s "$APK"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          "$AAPT" dump badging "$APK" > /tmp/telares-mobile-badging.txt
+          grep -q "package: name='br.com.telares.play'" /tmp/telares-mobile-badging.txt
+          grep -q "^launchable-activity:" /tmp/telares-mobile-badging.txt
+          grep -q "Telares Play" /tmp/telares-mobile-badging.txt
+      - name: Publish Telares Play Android phones and tablets
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telares-Play-Android-Mobile-v0.1.0-rc1-APK
+          path: shock-tv-hub/android/app/build/outputs/apk/mobile/debug/app-mobile-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Check permanent signing configuration
+        env:
+          KEYSTORE_B64: ${{ secrets.SHOCK_TV_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.SHOCK_TV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHOCK_TV_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.SHOCK_TV_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > shock-tv-release.jks
+            echo "SHOCK_MOBILE_RELEASE_READY=1" >> "$GITHUB_ENV"
+          fi
+      - name: Build signed mobile release
+        if: env.SHOCK_MOBILE_RELEASE_READY == '1'
+        env:
+          SHOCK_TV_SIGNING_PATH: ${{ github.workspace }}/shock-tv-hub/android/shock-tv-release.jks
+          SHOCK_TV_SIGNING_STORE_PASSWORD: ${{ secrets.SHOCK_TV_STORE_PASSWORD }}
+          SHOCK_TV_SIGNING_ALIAS: ${{ secrets.SHOCK_TV_KEY_ALIAS }}
+          SHOCK_TV_SIGNING_KEY_PASSWORD: ${{ secrets.SHOCK_TV_KEY_PASSWORD }}
+        run: gradle --no-daemon :app:assembleMobileRelease
+      - uses: actions/upload-artifact@v4
+        if: env.SHOCK_MOBILE_RELEASE_READY == '1'
+        with:
+          name: Telares-Play-Android-Mobile-v0.1.0-rc1-SIGNED
+          path: shock-tv-hub/android/app/build/outputs/apk/mobile/release/*.apk
           if-no-files-found: error
           retention-days: 30
 
