@@ -65,8 +65,11 @@
     [self.scroll addSubview:self.poster];
 
     self.typeLabel=[[UILabel alloc]initWithFrame:CGRectZero];
-    self.typeLabel.text=[[self string:self.media[@"type"]] isEqualToString:@"series"]?
-       @"SÉRIE  ·  TELARES PLAY":@"FILME  ·  TELARES PLAY";
+    NSString *kind=[self string:self.media[@"_kind"]].length?
+        [self string:self.media[@"_kind"]]:[self string:self.media[@"type"]];
+    self.typeLabel.text=([kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"])?
+        @"AO VIVO  ·  TELARES PLAY":[kind isEqualToString:@"series"]?
+        @"SÉRIE  ·  TELARES PLAY":@"FILME  ·  TELARES PLAY";
     self.typeLabel.textColor=[UIColor colorWithRed:.42 green:.83 blue:.89 alpha:1];
     self.typeLabel.font=[UIFont boldSystemFontOfSize:13];
     [self.scroll addSubview:self.typeLabel];
@@ -87,7 +90,7 @@
          @"Não há sinopse disponível para este título.";
     [self.scroll addSubview:self.descriptionLabel];
 
-    self.playButton=[self button:@"▶  Assistir" action:@selector(play) strong:YES];
+    self.playButton=[self button:([kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"])?@"▶  Assistir ao vivo":@"▶  Assistir" action:@selector(play) strong:YES];
     self.likeButton=[self button:@"" action:@selector(like) strong:NO];
     self.laterButton=[self button:@"" action:@selector(toggleLater) strong:NO];
     [self.scroll addSubview:self.playButton];

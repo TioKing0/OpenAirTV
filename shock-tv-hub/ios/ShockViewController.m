@@ -662,11 +662,15 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             NSString *base = [url substringToIndex:url.length - @"manifest.json".length];
             NSUInteger fetched = 0;
             for (NSDictionary *catalog in [self arr:manifest[@"catalogs"]]) {
-                if (fetched >= 5) break;
+                if (fetched >= 8) break;
                 NSString *type = [self str:catalog[@"type"]];
                 NSString *ident = [self str:catalog[@"id"]];
-                if ((! [type isEqualToString:@"movie"] && ![type isEqualToString:@"series"])
-                    || !ident.length) continue;
+                BOOL native=[type isEqualToString:@"movie"]||[type isEqualToString:@"series"];
+                NSString *lower=[[self str:catalog[@"name"]] stringByAppendingFormat:@" %@",ident].lowercaseString;
+                BOOL movieCustom=[lower containsString:@"movie"]||[lower containsString:@"film"];
+                BOOL seriesCustom=[lower containsString:@"series"]||[lower containsString:@"shows"];
+                if(!native&&!movieCustom&&!seriesCustom)continue;
+                if(!ident.length)continue;
                 fetched++;
                 NSString *endpoint = [NSString stringWithFormat:@"%@catalog/%@/%@.json",
                     base,[self pathEncode:type],[self pathEncode:ident]];
@@ -675,7 +679,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                     NSMutableArray *found = [NSMutableArray array];
                     for (NSDictionary *raw in [self arr:payload[@"metas"]]) {
                         NSDictionary *media = [self mediaFrom:raw type:type base:base];
-                        if(media)[found addObject:media];
+                        if(media){
+                            NSMutableDictionary *entry=[media mutableCopy];
+                            if(!native)entry[@"_kind"]=seriesCustom?@"series":@"movie";
+                            [found addObject:entry];
+                        }
                         if(found.count >= 28)break;
                     }
                     [self appendItems:found to:self.catalogItems];
@@ -702,7 +710,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     NSMutableDictionary *next = idx == NSNotFound ? [NSMutableDictionary dictionary] :
         [[self dict:all[idx]] mutableCopy];
-    for (NSString *name in @[@"id",@"name",@"type",@"poster",@"description",@"_base",@"_episode"])
+    for (NSString *name in @[@"id",@"name",@"type",@"_kind",@"poster",@"description",@"_base",@"_episode"])
         if (item[name] && [item[name] isKindOfClass:[NSString class]])next[name] = item[name];
     if (state.length)next[state] = @(![next[state] boolValue]);
     if (idx != NSNotFound)[all removeObjectAtIndex:idx];
@@ -944,7 +952,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         NSDictionary *chosen=strong.detailItem;
         [weakDetail dismissViewControllerAnimated:YES completion:^{
             strong.detailController=nil;
-            if([[strong str:chosen[@"type"]] isEqualToString:@"series"]&&
+            if(([[strong str:chosen[@"type"]] isEqualToString:@"series"]||
+                 [[strong str:chosen[@"_kind"]] isEqualToString:@"series"])&&
                 ![strong str:chosen[@"_episode"]].length)
                 [strong resolveEpisodes:chosen];
             else [strong resolveStreams:chosen];
@@ -1286,6 +1295,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)recordProgress:(double)seconds {
     if(!self.activePlayback)return;
+    if([[self str:self.activePlayback[@"_kind"]] isEqualToString:@"tv"]||
+       [[self str:self.activePlayback[@"type"]] isEqualToString:@"tv"])return;
     NSMutableDictionary *item=[self.activePlayback mutableCopy];
     item[@"position"]=@(seconds);
     item[@"watched"]=@YES;
