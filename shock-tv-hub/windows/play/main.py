@@ -72,6 +72,9 @@ class TelaresPlay:
         self.resume_sec=0
         self.play_started_at=0
         self.playing=False
+        self.live_group="Todos os canais"
+        self.live_selected=None
+        self.live_preview_frame=None
         self.build_ui()
         self.root.after(90,self.poll)
         self.root.after(1500,self.tick)
@@ -246,6 +249,9 @@ class TelaresPlay:
         return child
 
     def render_grid(self):
+        if self.section=="Canais ao vivo":
+            self.render_live_guide()
+            return
         surface=self.scroll_frame()
         if not self.results:
             self.label(surface,"Nenhum título nesta seção.",19,MUTED).pack(anchor="w",padx=28,pady=32)
@@ -285,6 +291,97 @@ class TelaresPlay:
             self.label(frame,"AO VIVO" if item.get("_kind")=="tv" else
                        "SÉRIE" if item.get("_kind",item.get("type"))=="series" else
                        "FILME",9,CYAN,bg=PANEL).pack(anchor="w",padx=7)
+
+    def live_group_for(self,item):
+        name=catalog.normalized(item.get("name",""))
+        source=catalog.normalized(item.get("_catalog",""))
+        if "telecine" in name:return "Telecine"
+        if "hbo" in name or "cinemax" in name:return "HBO / Max"
+        if any(w in name for w in ("sportv","espn","premiere","tnt sports")) or "esporte" in source:return "Esportes"
+        if any(w in name for w in ("globo","record","sbt","tv cultura","rede tv")) or "aberto" in source:return "Canais abertos"
+        if "noticia" in source or any(w in name for w in ("news","cnn")):return "Notícias"
+        if "infantil" in source or "cartoon" in name:return "Infantil"
+        if "religioso" in source:return "Religiosos"
+        if "entretenimento" in source:return "Entretenimento"
+        if "filmes" in source or "series" in source:return "Filmes e séries"
+        return "Outros canais"
+
+    def render_live_guide(self):
+        self.clear_stage()
+        root=tk.Frame(self.stage,bg=BG)
+        root.pack(fill="both",expand=True,padx=16,pady=10)
+        left=tk.Frame(root,width=175,bg=PANEL)
+        left.pack(side="left",fill="y",padx=(0,9))
+        left.pack_propagate(False)
+        middle=tk.Frame(root,width=245,bg=PANEL)
+        middle.pack(side="left",fill="y",padx=(0,9))
+        middle.pack_propagate(False)
+        preview=tk.Frame(root,bg=LIFT)
+        preview.pack(side="left",fill="both",expand=True)
+        groups=["Todos os canais"]
+        channels=[i for i in self.results if i.get("_kind")=="tv"]
+        for item in channels:
+            group=self.live_group_for(item)
+            if group not in groups:groups.append(group)
+        if self.live_group not in groups:self.live_group="Todos os canais"
+        filtered=[x for x in channels if self.live_group=="Todos os canais"
+                  or self.live_group_for(x)==self.live_group]
+        if self.live_selected not in filtered:self.live_selected=filtered[0] if filtered else None
+
+        self.label(left,"CATEGORIAS",12,CYAN,True,bg=PANEL).pack(fill="x",padx=11,pady=13)
+        group_list=tk.Listbox(left,activestyle="none",exportselection=False,bg=PANEL,fg=WHITE,
+                             selectbackground="#24556A",selectforeground=WHITE,
+                             bd=0,highlightthickness=0,font=("Segoe UI",11))
+        group_list.pack(fill="both",expand=True,padx=7,pady=4)
+        for name in groups:group_list.insert("end",name)
+        group_list.selection_set(groups.index(self.live_group))
+        def choose_group(event):
+            picked=group_list.curselection()
+            if not picked:return
+            self.live_group=groups[picked[0]]
+            self.live_selected=None
+            if self.playing:
+                self.playing=False
+                if self.video:self.video.close();self.video=None
+            self.render_live_guide()
+        group_list.bind("<<ListboxSelect>>",choose_group)
+
+        self.label(middle,"CANAIS • {}".format(len(filtered)),12,CYAN,True,bg=PANEL).pack(fill="x",padx=10,pady=13)
+        channel_list=tk.Listbox(middle,activestyle="none",exportselection=False,bg=PANEL,fg=WHITE,
+                               selectbackground="#24556A",selectforeground=WHITE,
+                               bd=0,highlightthickness=0,font=("Segoe UI",11))
+        channel_list.pack(fill="both",expand=True,padx=7,pady=4)
+        for item in filtered:channel_list.insert("end",item.get("name","Canal"))
+        if self.live_selected in filtered:channel_list.selection_set(filtered.index(self.live_selected))
+        def choose_channel(event):
+            picked=channel_list.curselection()
+            if not picked:return
+            item=filtered[picked[0]]
+            self.live_selected=item
+            if self.playing:
+                self.playing=False
+                if self.video:self.video.close();self.video=None
+            self.current_item=None
+            self.render_live_guide()
+            self.start_title(item)
+        channel_list.bind("<<ListboxSelect>>",choose_channel)
+
+        chosen=self.live_selected
+        self.label(preview,"AO VIVO",13,CYAN,True,bg=LIFT).pack(anchor="w",padx=16,pady=(16,2))
+        self.label(preview,chosen.get("name","Escolha um canal") if chosen else "Escolha um canal",
+            18,WHITE,True,bg=LIFT,wraplength=330).pack(anchor="w",padx=16,pady=(0,10))
+        self.live_preview_frame=tk.Frame(preview,bg="#000000",height=260)
+        self.live_preview_frame.pack(fill="both",expand=True,padx=12,pady=8)
+        self.live_preview_frame.pack_propagate(False)
+        controls=tk.Frame(preview,bg=LIFT)
+        controls.pack(fill="x",padx=12,pady=8)
+        self.video_note=self.label(preview,"Selecione um canal para iniciar a transmissão.",
+                                   10,MUTED,bg=LIFT,wraplength=325)
+        self.video_note.pack(anchor="w",padx=14,pady=(3,12))
+        self.btn(controls,"▶ Reproduzir",lambda:self.start_title(chosen) if chosen else None,CYAN,BG,padx=6).pack(side="left",padx=3)
+        self.btn(controls,"⏯",self.toggle_play,PANEL,padx=6).pack(side="left",padx=3)
+        self.btn(controls,"Próxima fonte",self.next_source,PANEL,padx=6).pack(side="left",padx=3)
+        self.btn(controls,"■",self.exit_player,PANEL,padx=6).pack(side="left",padx=3)
 
     def load_art(self,item,label):
         url=item.get("poster","")
@@ -373,10 +470,28 @@ class TelaresPlay:
             self.resume_sec=0 if item.get("_kind")=="tv" else float(self.get_entry(item).get("position") or 0)
             self.enter_player()
             self.play_source()
-        self.job(lambda:catalog.verified(catalog.streams(self.addons,item)),done,
+        def select_sources():
+            candidates=catalog.streams(self.addons,item)
+            verified=catalog.verified(candidates)
+            if item.get("_kind")!="tv":return verified
+            # Linear broadcasts often reject small byte-range probes. Let VLC
+            # attempt HTTP/HLS URLs after checked candidates fail.
+            seen={x["_url"] for x in verified}
+            return verified+[x for x in candidates if x["_url"] not in seen]
+        self.job(select_sources,done,
                 lambda reason:messagebox.showerror("Erro ao abrir o vídeo",reason))
 
     def enter_player(self):
+        if self.section=="Canais ao vivo" and self.live_preview_frame is not None:
+            self.playing=True
+            self.live_preview_frame.update_idletasks()
+            try:
+                self.video=VideoEngine(self.live_preview_frame.winfo_id(),
+                    lambda kind:self.messages.put((self.player_event,kind)))
+            except Exception as e:
+                self.playing=False
+                messagebox.showerror("VLC indisponível",str(e))
+            return
         self.clear_stage()
         self.playing=True
         area=tk.Frame(self.stage,bg="#000000")
@@ -462,7 +577,10 @@ class TelaresPlay:
             self.playing=False
             if self.video:self.video.close();self.video=None
         self.current_item=None;self.source_list=[]
-        self.open_section("Início")
+        if self.section=="Canais ao vivo":
+            self.render_live_guide()
+        else:
+            self.open_section("Início")
 
     def toggle_play(self):
         if self.playing and self.video:self.video.pause()
