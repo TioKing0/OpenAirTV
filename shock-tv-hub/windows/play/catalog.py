@@ -11,6 +11,10 @@ DEFAULT = [
  "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json",
  "https://torrentio.strem.fun/manifest.json",
  "https://thepiratebay-plus.strem.fun/manifest.json",
+ "https://catalogo-iptv-production.up.railway.app/manifest.json",
+ "https://plaviohd.edon.workers.dev/manifest.json",
+ "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
+ "https://h-gate.site/dc/manifest.json",
 ]
 def get_json(url):
     req=request.Request(url,headers={"User-Agent":"TelaresPlay/0.1","Accept":"application/json"})
@@ -86,6 +90,15 @@ def declared_genre(cat,category):
                 return "/genre="+enc(option)
     return ""
 
+def effective_kind(type_name, catalog_name="", catalog_id=""):
+    if type_name in ("tv","channel"):return "tv"
+    if type_name in ("movie","series"):return type_name
+    # Addons such as DC Universe advertise custom types but separate movie/series catalogs.
+    info=normalized(catalog_name+" "+catalog_id)
+    if "series" in info or "shows" in info:return "series"
+    if "movie" in info or "films" in info:return "movie"
+    return ""
+
 def discover(addons,term="",kind="all",category=""):
     term=term.strip()[:120]
     tasks=[]
@@ -94,35 +107,44 @@ def discover(addons,term="",kind="all",category=""):
         for cat in m.get("catalogs",[]):
             if not isinstance(cat,dict): continue
             typ=cat.get("type"); ident=cat.get("id")
-            if typ not in ("movie","series") or not isinstance(ident,str): continue
-            if kind!="all" and kind!=typ: continue
+            if not isinstance(ident,str):continue
+            display_kind=effective_kind(typ,cat.get("name",""),ident)
+            if not display_kind:continue
+            # Movies and series remain untouched; live channels have their own page.
+            if kind=="all" and display_kind=="tv":continue
+            if kind!="all" and kind!=display_kind:continue
             if not re.fullmatch("[A-Za-z0-9_.:-]{1,100}",ident):continue
             extras=cat.get("extra",[])
             if term and not any(e=="search" or isinstance(e,dict) and e.get("name")=="search" for e in extras):continue
             provider=m.get("name","Addon")
             catalog_name=cat.get("name",ident)
+            if category=="Canais ao vivo" and display_kind!="tv":continue
             if category in PLATFORM_ALIASES and category not in category_of(catalog_name,provider,[],ident):continue
             genre_args=declared_genre(cat,category) if category in GENRE_ALIASES and not term else ""
             extra="/search="+enc(term) if term else genre_args
-            out.append((root+"catalog/"+enc(typ)+"/"+enc(ident)+extra+".json",typ,root,m.get("name","Addon"),cat.get("name",ident),ident, bool(genre_args)))
-            if len(out)>=(5 if term else 3):break
+            out.append((root+"catalog/"+enc(typ)+"/"+enc(ident)+extra+".json",typ,display_kind,root,m.get("name","Addon"),cat.get("name",ident),ident,bool(genre_args)))
+            # Previously only the first three catalogs were considered, so genre/platform
+            # categories silently missed catalog declarations further down the manifest.
+            if len(out)>=(8 if term else 22 if category or kind=="tv" else 5):break
         return out
     with futures.ThreadPoolExecutor(max_workers=6) as pool:
         mfs=[pool.submit(catalogs,u) for u in list(dict.fromkeys(addons))[:20]]
         for f in futures.as_completed(mfs):
             try:tasks.extend(f.result())
             except Exception:pass
-        fs={pool.submit(get_json,url): (typ,root,provider,catname,catid,by_genre) for url,typ,root,provider,catname,catid,by_genre in tasks[:85]}
+        fs={pool.submit(get_json,url): (typ,display_kind,root,provider,catname,catid,by_genre)
+            for url,typ,display_kind,root,provider,catname,catid,by_genre in tasks[:110]}
         items=[]
         for f in futures.as_completed(fs):
-            typ,root,provider,catname,catid,by_genre=fs[f]
+            typ,display_kind,root,provider,catname,catid,by_genre=fs[f]
             try:
                 data=f.result().get("metas",[])
                 for x in data[:32] if isinstance(data,list) else []:
                     if not isinstance(x,dict) or not isinstance(x.get("id"),str) or not isinstance(x.get("name"),str):continue
-                    item=dict(x,type=x.get("type",typ),_base=root,_provider=provider,_catalog=catname)
+                    item=dict(x,type=typ,_kind=display_kind,_base=root,_provider=provider,_catalog=catname)
+                    # Raw 'type' must remain the manifest's Stremio protocol type for stream/meta lookup.
                     if by_genre:item["_queried_genre"]=category
-                    if category and category not in category_of(catname,provider,x.get("genres",[]),catid) and not by_genre:
+                    if category and category!="Canais ao vivo" and category not in category_of(catname,provider,x.get("genres",[]),catid) and not by_genre:
                         continue
                     items.append(item)
             except Exception:pass
