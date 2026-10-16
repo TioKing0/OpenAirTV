@@ -25,3 +25,7 @@ Workflow gera um pacote IPA ARMv7 sem assinatura para validação real no dispos
 - ID inalterado `br.com.shocktv.legacy`; `CFBundleVersion` atualizado para 2. O IPA continua sem assinatura, sujeito ao método de instalação no iPad com jailbreak.
 
 O IPA deve ser testado no aparelho físico. iOS 9/AVPlayer não reproduz hashes BitTorrent nem todos os formatos dos addons Android.
+
+## Telares Play 0.3.0, pré-lançamento
+
+Nome visível Telares Play, marca TELARES, sistema de fonte automática preservado. O botão de Fontes foi retirado da navegação normal e do player iPad; o mecanismo de troca automática permanece ativo. CFBundleIdentifier e executável técnico ShockTV são intencionalmente mantidos para não criar outro app nem descartar os dados. Iconografia unificada com Telares TV. Primeiro validar instalação por atualização, reprodução contínua e consumo de memória no iPad mini 1.

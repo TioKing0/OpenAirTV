@@ -184,7 +184,7 @@ public final class MainActivity extends Activity {
         sidebar.setPadding(dp(13),dp(26),dp(8),dp(15));
         sidebar.setBackgroundColor(0xff0b1926);
         shell.addView(sidebar,new LinearLayout.LayoutParams(dp(176),-1));
-        TextView logo=text("SHOCK",25,Color.WHITE,true);
+        TextView logo=text("TELARES",25,Color.WHITE,true);
         logo.setLetterSpacing(.08f);
         sidebar.addView(logo);
         TextView logo2=text("TV",19,AQUA,true);
@@ -197,7 +197,7 @@ public final class MainActivity extends Activity {
         navItem(sidebar,"⌕","Buscar","buscar");
         navItem(sidebar,"⊞","Fontes","fontes");
         View fill=new View(this);sidebar.addView(fill,new LinearLayout.LayoutParams(1,0,1f));
-        TextView foot=text("SHOCK TV\nv"+BuildConfig.VERSION_NAME,11,0xff648397,false);
+        TextView foot=text("TELARES TV\nv"+BuildConfig.VERSION_NAME,11,0xff648397,false);
         sidebar.addView(foot);
 
         browseScroll=new ScrollView(this);
@@ -667,7 +667,7 @@ public final class MainActivity extends Activity {
         LinearLayout right=new LinearLayout(this);right.setOrientation(LinearLayout.VERTICAL);
         right.setPadding(dp(36),0,dp(5),0);
         row.addView(right,new LinearLayout.LayoutParams(0,-2,1f));
-        right.addView(text(("series".equals(m.type)?"SÉRIE":"movie".equals(m.type)?"FILME":"TV")+"  ·  SHOCK TV",12,AQUA,true));
+        right.addView(text(("series".equals(m.type)?"SÉRIE":"movie".equals(m.type)?"FILME":"TV")+"  ·  TELARES TV",12,AQUA,true));
         TextView title=text(m.name,36,Color.WHITE,true);title.setMaxLines(3);
         LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.topMargin=dp(9);right.addView(title,tp);
         if(m.genre!=null&&!m.genre.isEmpty()){
@@ -1165,7 +1165,7 @@ public final class MainActivity extends Activity {
                     break;
                 }catch(Exception ex){
                     errors++;
-                    android.util.Log.w("ShockTV-Addon","Metadata addon unavailable ("+safeHost(manifestUrl)+"): "+ex.getClass().getSimpleName());
+                    android.util.Log.w("Telares-Addon","Metadata addon unavailable ("+safeHost(manifestUrl)+"): "+ex.getClass().getSimpleName());
                 }
             }
             final JSONArray result=episodes;
@@ -1297,7 +1297,7 @@ public final class MainActivity extends Activity {
                     }
                 }catch(Exception ex){
                     failed++;
-                    android.util.Log.w("ShockTV-Addon","Falha na busca de streams: "+safeHost(manifestUrl));
+                    android.util.Log.w("Telares-Addon","Falha na busca de streams: "+safeHost(manifestUrl));
                 }
             }
             final int skippedTorrents=torrents,skippedExternal=external,skippedBad=bad,failedAddons=failed;
@@ -1423,7 +1423,7 @@ public final class MainActivity extends Activity {
         if(verifiedOptions!=null)intent.putExtra("verifiedStreamOptions",verifiedOptions);
         startActivity(intent);
     }
-    private void message(String text){new AlertDialog.Builder(this).setTitle("Shock TV").setMessage(text).setPositiveButton("OK",null).show();}
+    private void message(String text){new AlertDialog.Builder(this).setTitle("Telares TV").setMessage(text).setPositiveButton("OK",null).show();}
     private static final class Media{String id="",type="",name="",poster="",description="",source="",episodeId="",origin="",catalogId="",genre="";}
     private JSONObject getJson(String url) throws Exception{
         if(!url.startsWith("https://"))throw new IOException("Este addon exige conexão HTTPS.");
@@ -1431,7 +1431,7 @@ public final class MainActivity extends Activity {
         connection.setConnectTimeout(6000);
         connection.setReadTimeout(8500);
         connection.setRequestProperty("Accept","application/json");
-        connection.setRequestProperty("User-Agent","ShockTV/0.3.2");
+        connection.setRequestProperty("User-Agent","Telares/1.0");
         connection.setInstanceFollowRedirects(true);
         try{
             int code=connection.getResponseCode();

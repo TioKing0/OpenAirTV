@@ -1,5 +1,5 @@
 /*
- * Shock TV brand assets generated locally by Gradle, no external image host or PC setup.
+ * Telares TV brand assets generated locally by Gradle, no external image host or PC setup.
  * Android TV launchers require a 320x180 xhdpi banner with legible branding.
  * Generates PNGs from Java2D on the Gradle JDK. Safe to rerun on any CI build.
  */
@@ -28,7 +28,7 @@ def drawPlay = { Graphics2D g, int x,int y,int w,int h ->
     g.setColor(new Color(16,64,81))
     g.fillRoundRect(x,y,w,h,(int)(w * 0.24d),(int)(w * 0.24d))
     g.setStroke(new BasicStroke(Math.max(2f,(float)(w * 0.022d))))
-    g.setColor(new Color(80,211,226))
+    g.setColor(new Color(104,216,233))
     g.drawRoundRect(x,y,w,h,(int)(w * 0.24d),(int)(w * 0.24d))
     Path2D.Double play=new Path2D.Double()
     play.moveTo(x+w * 0.36d,y+h * 0.25d)
@@ -44,9 +44,9 @@ def brandBanner={ ->
     Graphics2D g=(Graphics2D)parts[1]
     drawPlay(g,24,31,93,118)
     g.setColor(new Color(243,251,255))
-    g.setFont(new Font("SansSerif",Font.BOLD,48))
-    g.drawString("SHOCK",134,99)
-    g.setColor(new Color(100,225,237))
+    g.setFont(new Font("SansSerif",Font.BOLD,28))
+    g.drawString("TELARES",134,99)
+    g.setColor(new Color(104,216,233))
     g.setFont(new Font("SansSerif",Font.BOLD,28))
     g.drawString("TV",136,132)
     g.setStroke(new BasicStroke(3f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND))
@@ -60,8 +60,8 @@ def brandIcon={ ->
     Graphics2D g=(Graphics2D)parts[1]
     drawPlay(g,28,18,136,146)
     g.setColor(new Color(245,250,255))
-    g.setFont(new Font("SansSerif",Font.BOLD,26))
-    g.drawString("SHOCK",46,176)
+    g.setFont(new Font("SansSerif",Font.BOLD,21))
+    g.drawString("TELARES",48,177)
     g.dispose()
     return out
 }
@@ -77,7 +77,7 @@ tasks.register("generateTvBranding") {
         ImageIO.write(brandIcon(),"png",iconFile)
         if(!bannerFile.exists()||bannerFile.length()<1000||!iconFile.exists())
             throw new GradleException("Launcher asset generation failed")
-        logger.lifecycle("Shock TV launcher branding generated: banner 320x180 and icon 192x192")
+        logger.lifecycle("Telares TV launcher branding generated: banner 320x180 and icon 192x192")
     }
 }
 tasks.named("preBuild") { dependsOn(tasks.named("generateTvBranding")) }

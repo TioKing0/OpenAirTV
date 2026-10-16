@@ -66,7 +66,7 @@
 
     self.typeLabel=[[UILabel alloc]initWithFrame:CGRectZero];
     self.typeLabel.text=[[self string:self.media[@"type"]] isEqualToString:@"series"]?
-       @"SÉRIE  ·  SHOCK TV":@"FILME  ·  SHOCK TV";
+       @"SÉRIE  ·  TELARES PLAY":@"FILME  ·  TELARES PLAY";
     self.typeLabel.textColor=[UIColor colorWithRed:.42 green:.83 blue:.89 alpha:1];
     self.typeLabel.font=[UIFont boldSystemFontOfSize:13];
     [self.scroll addSubview:self.typeLabel];

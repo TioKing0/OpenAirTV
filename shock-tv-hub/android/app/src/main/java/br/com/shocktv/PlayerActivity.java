@@ -42,7 +42,7 @@ import java.util.Set;
 /** Full-screen player with bounded verified stream alternatives, adaptive tracks and quick D-pad controls. */
 @UnstableApi
 public final class PlayerActivity extends Activity {
-    private static final String TAG="ShockTV-Player";
+    private static final String TAG="Telares-Player";
     private ExoPlayer player;
     private PlayerView playerView;
     private UserLibrary library;
@@ -365,7 +365,7 @@ public final class PlayerActivity extends Activity {
         // Media3 usually refuses cross-protocol 301 by default. Our probe already normalized
         // the final URL. Allow HTTP->HTTPS redirection on header-free public streams.
         DefaultHttpDataSource.Factory http=new DefaultHttpDataSource.Factory()
-            .setUserAgent("ShockTV/0.3.4 (Android TV)")
+            .setUserAgent("Telares/1.0 (Android TV)")
             .setConnectTimeoutMs(6000).setReadTimeoutMs(12000);
         Map<String,String> headers=new HashMap<>();
         for(int i=0;i<chosen.headers.length&&i<chosen.values.length;i++){

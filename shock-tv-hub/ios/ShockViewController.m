@@ -131,7 +131,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"SHOCK TV";
+    self.title = @"TELARES";
     self.view.backgroundColor = [self dark];
     self.navigationController.navigationBar.barStyle = UIBarStyleBlack;
     self.navigationController.navigationBar.barTintColor = [self dark];
@@ -156,9 +156,9 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
                 [self.sources addObject:url];
         }
     }
-    self.navigationItem.rightBarButtonItem =
-        [[UIBarButtonItem alloc] initWithTitle:@"Fontes" style:UIBarButtonItemStylePlain
-                                      target:self action:@selector(showSources)];
+    // Addon management remains implemented but is not a visible toolbar button.
+    // During playback the automatic stream selector is the default experience.
+    self.navigationItem.rightBarButtonItem=nil;
 
     self.imageCache=[[NSCache alloc]init];
     self.imageCache.countLimit=38;
@@ -897,7 +897,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     }];
 }
 - (void)exitSpecialList {
-    self.title=@"SHOCK TV";
+    self.title=@"TELARES";
     self.mode=@"catalog";
     [self.view setNeedsLayout];
     self.navigationItem.leftBarButtonItem=nil;
@@ -977,7 +977,7 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
     if(!self.playerController){
         self.playerController=[[AVPlayerViewController alloc]init];
         self.playerController.showsPlaybackControls=YES;
-        [self installSourceControl];
+        // The native iPad player remains clean; automatic source failover stays active.
         __weak ShockViewController *weakSelf=self;
         [self presentViewController:self.playerController animated:YES completion:^{
             ShockViewController *strong=weakSelf;
