@@ -9,11 +9,74 @@ static NSString * const kDefaultTorrentio = @"https://torrentio.strem.fun/manife
 static NSString * const kDefaultNetflix = @"https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json";
 static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/manifest.json";
 
-@interface ShockViewController () <UITableViewDelegate, UITableViewDataSource, UISearchBarDelegate>
+
+/** Lightweight reusable portrait card designed specifically for the 1024x768 legacy iPad. */
+@interface ShockPosterCell : UICollectionViewCell
+@property(nonatomic,strong) UIImageView *art;
+@property(nonatomic,strong) UILabel *caption;
+@property(nonatomic,strong) UILabel *typeTag;
+@property(nonatomic,copy) NSString *imageURL;
+@end
+
+@implementation ShockPosterCell
+- (instancetype)initWithFrame:(CGRect)frame {
+    if((self=[super initWithFrame:frame])){
+        self.backgroundColor=[UIColor colorWithRed:.07 green:.13 blue:.20 alpha:1];
+        self.layer.cornerRadius=10;
+        self.layer.masksToBounds=YES;
+        self.art=[[UIImageView alloc]initWithFrame:CGRectZero];
+        self.art.contentMode=UIViewContentModeScaleAspectFill;
+        self.art.clipsToBounds=YES;
+        self.art.backgroundColor=[UIColor colorWithRed:.10 green:.20 blue:.29 alpha:1];
+        [self.contentView addSubview:self.art];
+        self.caption=[[UILabel alloc]initWithFrame:CGRectZero];
+        self.caption.textColor=[UIColor colorWithWhite:.97 alpha:1];
+        self.caption.font=[UIFont boldSystemFontOfSize:15];
+        self.caption.numberOfLines=2;
+        [self.contentView addSubview:self.caption];
+        self.typeTag=[[UILabel alloc]initWithFrame:CGRectZero];
+        self.typeTag.font=[UIFont systemFontOfSize:11];
+        self.typeTag.textColor=[UIColor colorWithRed:.55 green:.78 blue:.87 alpha:1];
+        [self.contentView addSubview:self.typeTag];
+    }
+    return self;
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat w=self.bounds.size.width,h=self.bounds.size.height;
+    CGFloat poster=h-53;
+    self.art.frame=CGRectMake(0,0,w,poster);
+    self.caption.frame=CGRectMake(9,poster+5,w-18,27);
+    self.typeTag.frame=CGRectMake(9,h-19,w-18,14);
+}
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.art.image=nil;
+    self.imageURL=nil;
+    self.caption.text=@"";
+    self.typeTag.text=@"";
+}
+@end
+
+@interface ShockViewController () <UITableViewDelegate, UITableViewDataSource, UISearchBarDelegate, UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 @property(nonatomic,strong) UITableView *table;
 @property(nonatomic,strong) UISearchBar *search;
 @property(nonatomic,strong) UISegmentedControl *sections;
 @property(nonatomic,strong) UILabel *status;
+@property(nonatomic,strong) UICollectionView *posterGrid;
+@property(nonatomic,strong) UIView *hero;
+@property(nonatomic,strong) UIImageView *heroArt;
+@property(nonatomic,strong) UILabel *heroTitle;
+@property(nonatomic,strong) UILabel *heroSummary;
+@property(nonatomic,strong) UIView *navigationStrip;
+@property(nonatomic,strong) UIButton *searchToggle;
+@property(nonatomic,strong) NSCache *imageCache;
+@property(nonatomic,strong) NSMutableSet *pendingImages;
+@property(nonatomic,strong) NSDictionary *featuredItem;
+@property(nonatomic,strong) NSDictionary *detailItem;
+@property(nonatomic,strong) UIViewController *detailController;
+@property(nonatomic,assign) BOOL searching;
+
 @property(nonatomic,strong) NSMutableArray *sources;
 @property(nonatomic,strong) NSMutableDictionary *manifests;
 @property(nonatomic,strong) NSMutableArray *catalogItems;
@@ -79,45 +142,232 @@ static NSString * const kDefaultPirate = @"https://thepiratebay-plus.strem.fun/m
         [[UIBarButtonItem alloc] initWithTitle:@"Fontes" style:UIBarButtonItemStylePlain
                                       target:self action:@selector(showSources)];
 
-    self.sections = [[UISegmentedControl alloc] initWithItems:@[@"Início",@"Filmes",@"Séries",@"Minha lista"]];
-    self.sections.selectedSegmentIndex = 0;
-    self.sections.tintColor = [self accent];
-    [self.sections addTarget:self action:@selector(changeSection) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:self.sections];
+    self.imageCache=[[NSCache alloc]init];
+    self.imageCache.countLimit=70;
+    self.pendingImages=[NSMutableSet set];
 
-    self.search = [[UISearchBar alloc] initWithFrame:CGRectZero];
-    self.search.delegate = self;
-    self.search.barTintColor = [self dark];
-    self.search.tintColor = [self accent];
-    self.search.placeholder = @"Buscar filmes e séries nos addons";
-    self.search.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    self.search.returnKeyType = UIReturnKeySearch;
+    self.navigationStrip=[[UIView alloc]initWithFrame:CGRectZero];
+    self.navigationStrip.backgroundColor=[UIColor colorWithRed:.057 green:.107 blue:.167 alpha:1];
+    self.navigationStrip.layer.cornerRadius=12;
+    [self.view addSubview:self.navigationStrip];
+    NSArray *tabs=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    for(NSUInteger index=0;index<tabs.count;index++){
+        UIButton *button=[UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag=100+(NSInteger)index;
+        [button setTitle:tabs[index] forState:UIControlStateNormal];
+        button.titleLabel.font=[UIFont boldSystemFontOfSize:15];
+        [button setTitleColor:[UIColor colorWithWhite:.77 alpha:1] forState:UIControlStateNormal];
+        [button addTarget:self action:@selector(tapTab:) forControlEvents:UIControlEventTouchUpInside];
+        button.layer.cornerRadius=9;
+        [self.navigationStrip addSubview:button];
+    }
+    self.searchToggle=[UIButton buttonWithType:UIButtonTypeCustom];
+    [self.searchToggle setTitle:@"⌕  Buscar" forState:UIControlStateNormal];
+    [self.searchToggle setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.searchToggle.titleLabel.font=[UIFont boldSystemFontOfSize:15];
+    self.searchToggle.backgroundColor=[UIColor colorWithRed:.09 green:.31 blue:.39 alpha:1];
+    self.searchToggle.layer.cornerRadius=10;
+    [self.searchToggle addTarget:self action:@selector(toggleSearch) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.searchToggle];
+
+    self.search=[[UISearchBar alloc]initWithFrame:CGRectZero];
+    self.search.delegate=self;
+    self.search.barTintColor=[self dark];
+    self.search.tintColor=[self accent];
+    self.search.placeholder=@"Qual filme ou série você procura?";
+    self.search.autocapitalizationType=UITextAutocapitalizationTypeNone;
+    self.search.returnKeyType=UIReturnKeySearch;
+    self.search.hidden=YES;
     [self.view addSubview:self.search];
 
-    self.table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.table.delegate = self;
-    self.table.dataSource = self;
-    self.table.rowHeight = 88;
-    self.table.backgroundColor = [self dark];
-    self.table.separatorColor = [UIColor colorWithWhite:0.22 alpha:1];
-    self.table.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
+    self.hero=[[UIView alloc]initWithFrame:CGRectZero];
+    self.hero.backgroundColor=[UIColor colorWithRed:.075 green:.18 blue:.26 alpha:1];
+    self.hero.layer.cornerRadius=14;
+    self.hero.clipsToBounds=YES;
+    UITapGestureRecognizer *tap=[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(openFeatured)];
+    [self.hero addGestureRecognizer:tap];
+    [self.view addSubview:self.hero];
+
+    self.heroArt=[[UIImageView alloc]initWithFrame:CGRectZero];
+    self.heroArt.backgroundColor=[UIColor colorWithRed:.10 green:.23 blue:.31 alpha:1];
+    self.heroArt.clipsToBounds=YES;
+    self.heroArt.contentMode=UIViewContentModeScaleAspectFill;
+    [self.hero addSubview:self.heroArt];
+    self.heroTitle=[[UILabel alloc]initWithFrame:CGRectZero];
+    self.heroTitle.font=[UIFont boldSystemFontOfSize:26];
+    self.heroTitle.textColor=[UIColor whiteColor];
+    self.heroTitle.numberOfLines=2;
+    [self.hero addSubview:self.heroTitle];
+    self.heroSummary=[[UILabel alloc]initWithFrame:CGRectZero];
+    self.heroSummary.font=[UIFont systemFontOfSize:14];
+    self.heroSummary.textColor=[UIColor colorWithRed:.70 green:.83 blue:.90 alpha:1];
+    self.heroSummary.numberOfLines=3;
+    [self.hero addSubview:self.heroSummary];
+
+    UICollectionViewFlowLayout *layout=[[UICollectionViewFlowLayout alloc]init];
+    layout.minimumInteritemSpacing=14;
+    layout.minimumLineSpacing=17;
+    layout.sectionInset=UIEdgeInsetsMake(10,19,20,19);
+    self.posterGrid=[[UICollectionView alloc]initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.posterGrid.delegate=self;
+    self.posterGrid.dataSource=self;
+    self.posterGrid.backgroundColor=[self dark];
+    self.posterGrid.alwaysBounceVertical=YES;
+    [self.posterGrid registerClass:[ShockPosterCell class] forCellWithReuseIdentifier:@"shock.card"];
+    [self.view addSubview:self.posterGrid];
+
+    // Lists for series episodes and sources remain native, readable touch lists.
+    self.table=[[UITableView alloc]initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.table.delegate=self;
+    self.table.dataSource=self;
+    self.table.rowHeight=88;
+    self.table.hidden=YES;
+    self.table.backgroundColor=[self dark];
+    self.table.separatorColor=[UIColor colorWithWhite:.22 alpha:1];
+    self.table.tableFooterView=[[UIView alloc]initWithFrame:CGRectZero];
     [self.view addSubview:self.table];
 
-    self.status = [[UILabel alloc] initWithFrame:CGRectZero];
-    self.status.font = [UIFont systemFontOfSize:12];
-    self.status.textColor = [UIColor colorWithWhite:0.75 alpha:1];
-    self.status.textAlignment = NSTextAlignmentLeft;
-    self.status.text = @"Buscando catálogos...";
+    self.status=[[UILabel alloc]initWithFrame:CGRectZero];
+    self.status.font=[UIFont systemFontOfSize:13];
+    self.status.textColor=[UIColor colorWithWhite:.73 alpha:1];
+    self.status.textAlignment=NSTextAlignmentLeft;
+    self.status.text=@"Consultando catálogos reais...";
     [self.view addSubview:self.status];
+    [self setSelectedTab];
     [self loadCatalogs];
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    CGFloat width = self.view.bounds.size.width, height = self.view.bounds.size.height;
-    self.sections.frame = CGRectMake(14,12,width-28,36);
-    self.search.frame = CGRectMake(6,51,width-12,50);
-    self.status.frame = CGRectMake(20,height-34,width-40,25);
-    self.table.frame = CGRectMake(0,103,width,height-141);
+    CGFloat width=self.view.bounds.size.width,height=self.view.bounds.size.height;
+    BOOL landscape=width>height;
+    CGFloat margin=landscape?23:17;
+    CGFloat navTop=12,navHeight=48,searchW=landscape?142:106;
+    self.searchToggle.frame=CGRectMake(width-searchW-margin,navTop,searchW,navHeight);
+    self.navigationStrip.frame=CGRectMake(margin,navTop,
+        width-margin*3-searchW,navHeight);
+    CGFloat tabW=self.navigationStrip.bounds.size.width/4.0;
+    for(UIView *control in self.navigationStrip.subviews)
+        if([control isKindOfClass:[UIButton class]])
+            control.frame=CGRectMake((control.tag-100)*tabW+3,3,tabW-6,navHeight-6);
+    CGFloat offset=navTop+navHeight+13;
+    self.search.frame=CGRectMake(margin-9,offset,width-margin*2+18,53);
+    if(self.searching)offset+=57;
+    BOOL isSpecial=[self.mode isEqualToString:@"episodes"]||[self.mode isEqualToString:@"streams"];
+    BOOL showHero=!isSpecial&&!self.searching&&[self.filter isEqualToString:@"Início"]&&self.results.count>0;
+    self.hero.hidden=!showHero;
+    if(showHero){
+        CGFloat heroHeight=landscape?174:150;
+        self.hero.frame=CGRectMake(margin,offset,width-margin*2,heroHeight);
+        CGFloat artW=landscape?144:116;
+        self.heroArt.frame=CGRectMake(0,0,artW,heroHeight);
+        self.heroTitle.frame=CGRectMake(artW+20,18,width-artW-margin*2-42,landscape?73:55);
+        self.heroSummary.frame=CGRectMake(artW+20,landscape?97:75,width-artW-margin*2-42,64);
+        offset+=heroHeight+13;
+    }
+    CGFloat bottom=height-39;
+    CGRect body=CGRectMake(0,offset,width,MAX(80,bottom-offset));
+    self.posterGrid.frame=body;
+    self.table.frame=body;
+    self.table.hidden=!isSpecial;
+    self.posterGrid.hidden=isSpecial;
+    self.status.frame=CGRectMake(margin,height-37,width-margin*2,26);
+    [self.posterGrid.collectionViewLayout invalidateLayout];
+}
+- (void)setSelectedTab {
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    for(UIView *view in self.navigationStrip.subviews){
+        if(![view isKindOfClass:[UIButton class]])continue;
+        UIButton *button=(UIButton *)view;
+        NSInteger index=button.tag-100;
+        if(index<0||index>=names.count)continue;
+        BOOL chosen=[self.filter isEqualToString:names[(NSUInteger)index]]&&!self.searching;
+        button.backgroundColor=chosen?
+            [UIColor colorWithRed:.14 green:.39 blue:.49 alpha:1]:[UIColor clearColor];
+        [button setTitleColor:chosen?[UIColor whiteColor]:
+            [UIColor colorWithWhite:.75 alpha:1] forState:UIControlStateNormal];
+    }
+}
+- (void)tapTab:(UIButton *)button {
+    NSArray *names=@[@"Início",@"Filmes",@"Séries",@"Minha lista"];
+    NSInteger idx=button.tag-100;
+    if(idx<0||idx>=names.count)return;
+    self.searching=NO;
+    self.search.hidden=YES;
+    [self.search resignFirstResponder];
+    self.currentTerm=@"";
+    self.search.text=@"";
+    self.filter=names[(NSUInteger)idx];
+    [self setSelectedTab];
+    [self refreshList];
+}
+- (void)toggleSearch {
+    if([self.mode isEqualToString:@"episodes"]||[self.mode isEqualToString:@"streams"])
+        [self exitSpecialList];
+    self.searching=!self.searching;
+    self.search.hidden=!self.searching;
+    [self.searchToggle setTitle:self.searching?@"✕  Fechar":@"⌕  Buscar"
+        forState:UIControlStateNormal];
+    if(self.searching){[self.search becomeFirstResponder];}
+    else {
+        [self.search resignFirstResponder];
+        self.currentTerm=@"";
+        self.search.text=@"";
+        [self loadCatalogs];
+    }
+    [self setSelectedTab];
+    [self refreshList];
+}
+- (void)refreshHero {
+    BOOL display=self.results.count>0&&!self.searching&&[self.filter isEqualToString:@"Início"]&&
+        [self.mode isEqualToString:@"catalog"];
+    self.featuredItem=display?self.results.firstObject:nil;
+    if(display){
+        self.heroTitle.text=[self str:self.featuredItem[@"name"]];
+        self.heroSummary.text=[self str:self.featuredItem[@"description"]];
+        self.heroArt.image=nil;
+        [self loadPoster:[self str:self.featuredItem[@"poster"]] into:self.heroArt];
+    }
+    [self.view setNeedsLayout];
+}
+- (void)openFeatured {
+    if(self.featuredItem)[self showDetails:self.featuredItem];
+}
+- (void)loadPoster:(NSString *)url into:(UIImageView *)view {
+    if(![url hasPrefix:@"https://"])return;
+    UIImage *cached=[self.imageCache objectForKey:url];
+    if(cached){view.image=cached;return;}
+    if([self.pendingImages containsObject:url])return;
+    [self.pendingImages addObject:url];
+    __weak ShockViewController *weakSelf=self;
+    [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:url]
+        completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
+            if(error||data.length<100||data.length>1500000){
+                dispatch_async(dispatch_get_main_queue(),^{
+                    [weakSelf.pendingImages removeObject:url];});return;
+            }
+            UIImage *raw=[UIImage imageWithData:data];
+            if(!raw){dispatch_async(dispatch_get_main_queue(),^{
+                [weakSelf.pendingImages removeObject:url];});return;}
+            // Reduce poster memory pressure: cache ~180x270 point textures, not originals.
+            CGSize target=CGSizeMake(190,270);
+            UIGraphicsBeginImageContextWithOptions(target,YES,1);
+            [raw drawInRect:CGRectMake(0,0,target.width,target.height)];
+            UIImage *resized=UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+            dispatch_async(dispatch_get_main_queue(),^{
+                ShockViewController *strong=weakSelf;
+                if(!strong)return;
+                [strong.pendingImages removeObject:url];
+                if(!resized)return;
+                [strong.imageCache setObject:resized forKey:url];
+                // Reused cells must verify the URL before displaying async artwork.
+                if([strong.heroArt isEqual:view]&&
+                    [[strong str:strong.featuredItem[@"poster"]] isEqualToString:url])
+                    strong.heroArt.image=resized;
+                for(ShockPosterCell *cell in [strong.posterGrid visibleCells])
+                    if([cell.imageURL isEqualToString:url])cell.art.image=resized;
+            });
+        }] resume];
 }
 - (NSString *)keyFor:(NSDictionary *)item {
     NSString *type = [self str:item[@"type"]];
