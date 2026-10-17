@@ -1,36 +1,36 @@
 {
   "brand": "TELARES",
-  "batch": "telares-ipad-live-player-rc9",
-  "date": "2026-10-16",
-  "feature": "Player Ao vivo separado no iPad, AVPlayerLayer próprio com controles Pausar/Continuar, Tela cheia, Tentar novamente, HLS prioritário, diagnóstico de erros AVFoundation e fallback; VOD mantém o AVPlayerViewController. Windows/Android reempacotados no mesmo lote.",
+  "batch": "telares-live-transport-rc10",
+  "date": "2026-10-17",
+  "feature": "iPad mini 1 iOS 9: identificar -1008 corretamente como recurso indisponível, inspecionar status HTTP de playlist HLS e tentar rendições alternativas H.264 quando anunciadas pelo servidor; preservar layout Guia Ao Vivo e VOD. Todos os clientes e utilitários recompilados no mesmo lote; a fonte de canais pode continuar indisponível.",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc9",
+      "version": "1.0.0-rc10",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.6"
+      "version": "0.2.7"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.6"
+      "version": "0.2.7"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc2",
+      "version": "0.1.0-rc3",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -151,5 +151,10 @@
     "independentDecoder": "Not bundled: MobileVLCKit binary compatibility and licenses require separate validation",
     "sourceOrder": "HLS first, other supported HTTP URLs fallback",
     "errorDisplay": "AVFoundation domain and code, no signed stream URLs"
+  },
+  "liveDiagnostics": {
+    "errorMinus1008": "NSURLErrorResourceUnavailable; resource may be missing or not decodable",
+    "hlsRecovery": "Try up to 8 explicitly advertised non-HEVC/AV1 variants when original source is a HLS master playlist",
+    "limitations": "No DRM bypass, guaranteed feed, or server-side transcoding. If only an unusable source exists, app explains why."
   }
 }

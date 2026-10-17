@@ -50,3 +50,7 @@ A categoria **Anime** foi retirada dos filtros de TV, iPad e Windows Play por re
 ## RC9: player Ao vivo dedicado no iPad iOS 9
 
 A interface do Ao vivo agora usa `AVPlayerLayer` embutida na prévia da Telares, com Pausar/Continuar, tentar novamente, HLS primeiro, erros de domínio/código AVFoundation e tela cheia com o controle nativo; o player VOD de filmes/séries foi preservado. O decodificador permanece AVFoundation para ARMv7: **isso não acrescenta suporte a codecs que o iOS 9 não reconhece**. Uma segunda engine baseada em MobileVLCKit foi pesquisada, mas integração ARMv7/SDK/licenças e reprodução real precisam ser verificadas antes de integrar à versão estável. Android TV, Android telefone e Windows foram apenas republicados no mesmo lote, sem alteração no motor de vídeo. Assinatura temporária e addons indisponíveis continuam limitantes.
+
+## RC10 (2026-10-17) — transmissão ao vivo no iPad
+
+O erro NSURLErrorDomain -1008 é NSURLErrorResourceUnavailable, não exclusivamente codec. No player iPad 9 o detector registra o status HTTP quando o AVPlayer disponibiliza erro de transporte; se a única fonte HLS falhar, tenta primeiro as variantes H.264 explicitamente listadas em uma master playlist, com prazo de acesso limitado a 8 s. Não inventar URLs, remover DRM, aceitar downgrade HTTPS→HTTP, armazenar tokens, ou inferir que um canal tem sinal sem teste de hardware. Player de vídeos sob demanda permanece no caminho anterior. Todos os artefatos são rebuilds da RC10; suporte ao streaming dos addons só pode ser confirmado em dispositivo real.
