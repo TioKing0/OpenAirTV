@@ -185,4 +185,29 @@ class CatalogTest(unittest.TestCase):
         self.assertIn('@"live|%@|%@|%@|%@"',source)
         self.assertIn('return [NSString stringWithFormat:@"%@|%@|%@",type,ident,episode];',source)
 
+    def test_android_channel_identity_is_namespaced(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        tv=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        self.assertIn('"live|"+item.type+"|"+item.id+"|"+item.source',tv)
+        self.assertIn('if(isChannel(existing)!=isChannel(candidate))continue;',tv)
+        self.assertIn('m.displayType=liveCatalog?"tv"',tv)
+        self.assertIn('if(isBroadcastCatalog(manifest,c,source))continue;',tv)
+    def test_tv_has_real_inline_preview_and_cleans_decoder(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        source=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        self.assertIn('new androidx.media3.exoplayer.ExoPlayer.Builder(this).build()',source)
+        self.assertIn('attachInlinePreview(selected,monitor,previewStatus)',source)
+        self.assertIn('player.setVolume(0f)',source)
+        self.assertIn('stopInlinePreview();',source)
+        self.assertIn('private void showInlineSource(',source)
+    def test_branding_and_categories_retained_rc11(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        ios=(root/"ios/Resources/Info.plist").read_text(encoding="utf-8")
+        tv=(root/"android/app/src/main/java/br/com/shocktv/MainActivity.java").read_text(encoding="utf-8")
+        self.assertIn('<string>Telares Play</string>',ios)
+        for x in ('"Filmes","filmes"','"Séries","series"','"Canais ao vivo","aovivo"'):
+            self.assertIn(x,tv)
+        self.assertIn('String[] tags={"Canais ao vivo","Anime"',tv)
+        self.assertNotIn('setTitle("Shock TV")',tv)
+
 if __name__=="__main__":unittest.main()

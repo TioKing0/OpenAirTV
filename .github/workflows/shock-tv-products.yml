@@ -50,7 +50,7 @@ jobs:
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc10-APK
+          name: Telares-TV-AndroidTV-v1.0.0-rc11-APK
           path: shock-tv-hub/android/app/build/outputs/apk/tv/debug/app-tv-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -80,7 +80,7 @@ jobs:
         if: env.SHOCK_RELEASE_READY == '1'
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc10-SIGNED
+          name: Telares-TV-AndroidTV-v1.0.0-rc11-SIGNED
           path: shock-tv-hub/android/app/build/outputs/apk/tv/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -116,7 +116,7 @@ jobs:
       - name: Publish Telares Play Android phones and tablets
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-Android-Mobile-v0.1.0-rc3-APK
+          name: Telares-Play-Android-Mobile-v0.1.0-rc4-APK
           path: shock-tv-hub/android/app/build/outputs/apk/mobile/debug/app-mobile-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.SHOCK_MOBILE_RELEASE_READY == '1'
         with:
-          name: Telares-Play-Android-Mobile-v0.1.0-rc3-SIGNED
+          name: Telares-Play-Android-Mobile-v0.1.0-rc4-SIGNED
           path: shock-tv-hub/android/app/build/outputs/apk/mobile/release/*.apk
           if-no-files-found: error
           retention-days: 30

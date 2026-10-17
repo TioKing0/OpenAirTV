@@ -1,36 +1,36 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-transport-rc10",
+  "batch": "telares-live-guide-rc11",
   "date": "2026-10-17",
-  "feature": "iPad mini 1 iOS 9: identificar -1008 corretamente como recurso indisponível, inspecionar status HTTP de playlist HLS e tentar rendições alternativas H.264 quando anunciadas pelo servidor; preservar layout Guia Ao Vivo e VOD. Todos os clientes e utilitários recompilados no mesmo lote; a fonte de canais pode continuar indisponível.",
+  "feature": "Distinguir a identidade de canais ao vivo de VOD mesmo quando addons utilizam id e type idênticos; evitar fusão de canais com séries no Android, iPad e Windows; prévia ao vivo sem som embutida na Android TV com limpeza segura de player e troca entre URLs candidatas; preservar categorias de filmes, séries e anime.",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc10",
+      "version": "1.0.0-rc11",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.8",
+      "version": "0.3.9",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.7"
+      "version": "0.2.8"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.7"
+      "version": "0.2.8"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc3",
+      "version": "0.1.0-rc4",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -156,5 +156,19 @@
     "errorMinus1008": "NSURLErrorResourceUnavailable; resource may be missing or not decodable",
     "hlsRecovery": "Try up to 8 explicitly advertised non-HEVC/AV1 variants when original source is a HLS master playlist",
     "limitations": "No DRM bypass, guaranteed feed, or server-side transcoding. If only an unusable source exists, app explains why."
+  },
+  "qa": {
+    "status": "Compilation checks required; physical iPad mini 1, Android TV and Windows video tests pending",
+    "retainedSections": [
+      "Início",
+      "Filmes",
+      "Séries",
+      "Anime",
+      "Minha lista",
+      "Categorias",
+      "Canais ao vivo"
+    ],
+    "streamAvailability": "Dependent on actual addon, network, codecs, DRM and rights",
+    "androidTvInlinePreview": "muted Media3 preview with fallback; user can open fullscreen"
   }
 }

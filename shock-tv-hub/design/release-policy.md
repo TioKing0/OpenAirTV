@@ -54,3 +54,12 @@ A interface do Ao vivo agora usa `AVPlayerLayer` embutida na prévia da Telares,
 ## RC10 (2026-10-17) — transmissão ao vivo no iPad
 
 O erro NSURLErrorDomain -1008 é NSURLErrorResourceUnavailable, não exclusivamente codec. No player iPad 9 o detector registra o status HTTP quando o AVPlayer disponibiliza erro de transporte; se a única fonte HLS falhar, tenta primeiro as variantes H.264 explicitamente listadas em uma master playlist, com prazo de acesso limitado a 8 s. Não inventar URLs, remover DRM, aceitar downgrade HTTPS→HTTP, armazenar tokens, ou inferir que um canal tem sinal sem teste de hardware. Player de vídeos sob demanda permanece no caminho anterior. Todos os artefatos são rebuilds da RC10; suporte ao streaming dos addons só pode ser confirmado em dispositivo real.
+
+## RC11: separar identidade de vídeo e canal
+
+- **Nenhum gênero prévio é removido**: Filmes, Séries, Anime, Ação, Comédia, Drama, Suspense, Terror, Animação, Ficção científica, Documentário, Romance, Netflix, Max/HBO, Disney+, Prime Video, Apple TV+, Paramount+ e Crunchyroll continuam como antes.
+- Um `id` Stremio pode ser compartilhado entre um catálogo `series` e um de canais `series`. Para canais, incluir namespace `live|` no índice de interface, preservando o formato de dados VOD já instalado. Misturar somente por `type|id` era um risco de fonte/metadata incompatível.
+- Android TV: guia de três colunas e prévia silenciosa reproduzida pelo Media3 no painel direito. Não instalar segundo player durante a reprodução em tela cheia; liberar ao sair da seção e ao pausar o app. Prévia e player em tela cheia não provam que todos os canais respondam.
+- iOS 9: mantém AVPlayer nativo, HLS direto sem bloquear em checagem Range, fallback limitado e tratamento de erro sem URL exposta. `CFBundleDisplayName=Telares Play`; identificador técnico legado `br.com.shocktv.legacy` permanece para atualizações.
+- Windows: `Telares Play` mantém a interface de três colunas e VLC integrado; chave de canais separada das entradas sob demanda. Os utilitários `Telares Install` são redistribuídos sem alterar sua finalidade.
+- Validação física obrigatória: fonte ao vivo compatível, troca de canal, filtro Série/Filme sem canal, retorno do player à lista, 20 min de reprodução e preservação de favoritos.
