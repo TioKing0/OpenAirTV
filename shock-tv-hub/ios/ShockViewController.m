@@ -126,6 +126,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,strong) UILabel *liveTitle;
 @property(nonatomic,strong) UILabel *liveMessage;
 @property(nonatomic,strong) UIButton *liveFullscreen;
+@property(nonatomic,strong) UIButton *liveRetryButton;
+@property(nonatomic,strong) UIButton *livePauseButton;
+@property(nonatomic,strong) AVPlayerLayer *liveVideoLayer;
+@property(nonatomic,copy) NSString *liveLastFailure;
+@property(nonatomic,assign) NSUInteger liveAttemptCount;
 @property(nonatomic,copy) NSString *liveGroup;
 @property(nonatomic,strong) NSArray *liveGroupNames;
 @property(nonatomic,strong) NSArray *liveFiltered;
@@ -310,6 +315,24 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
        forControlEvents:UIControlEventTouchUpInside];
     self.liveFullscreen.hidden=YES;
     [self.liveGuide addSubview:self.liveFullscreen];
+    self.livePauseButton=[UIButton buttonWithType:UIButtonTypeCustom];
+    [self.livePauseButton setTitle:@"Pausar" forState:UIControlStateNormal];
+    self.livePauseButton.titleLabel.font=[UIFont boldSystemFontOfSize:14];
+    self.livePauseButton.backgroundColor=[UIColor colorWithRed:.12 green:.36 blue:.46 alpha:1];
+    self.livePauseButton.layer.cornerRadius=9;
+    [self.livePauseButton addTarget:self action:@selector(toggleLivePlayback)
+        forControlEvents:UIControlEventTouchUpInside];
+    self.livePauseButton.hidden=YES;
+    [self.liveGuide addSubview:self.livePauseButton];
+    self.liveRetryButton=[UIButton buttonWithType:UIButtonTypeCustom];
+    [self.liveRetryButton setTitle:@"Tentar novamente" forState:UIControlStateNormal];
+    self.liveRetryButton.titleLabel.font=[UIFont boldSystemFontOfSize:14];
+    self.liveRetryButton.backgroundColor=[UIColor colorWithRed:.12 green:.36 blue:.46 alpha:1];
+    self.liveRetryButton.layer.cornerRadius=9;
+    [self.liveRetryButton addTarget:self action:@selector(retryLiveSelectedChannel)
+        forControlEvents:UIControlEventTouchUpInside];
+    self.liveRetryButton.hidden=YES;
+    [self.liveGuide addSubview:self.liveRetryButton];
     self.liveGroupNames=@[@"Todos os canais"];self.liveFiltered=@[];
     self.status=[[UILabel alloc]initWithFrame:CGRectZero];
     self.status.font=[UIFont systemFontOfSize:13];
@@ -370,7 +393,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         if(self.playerController.parentViewController==self)
             self.playerController.view.frame=self.liveScreen.bounds;
         self.liveMessage.frame=CGRectMake(previewX+5,screenH+64,previewW-10,83);
-        self.liveFullscreen.frame=CGRectMake(previewX+5,screenH+150,MIN(166,previewW-10),43);
+        self.liveFullscreen.frame=CGRectMake(previewX+5,screenH+150,MIN(140,(previewW-15)/2),43);
+        self.livePauseButton.frame=CGRectMake(previewX+12+MIN(140,(previewW-15)/2),
+            screenH+150,MIN(100,(previewW-15)/2),43);
+        self.liveRetryButton.frame=CGRectMake(previewX+5,screenH+150,MIN(200,previewW-10),43);
+        self.liveVideoLayer.frame=self.liveScreen.bounds;
     }
     self.status.frame=CGRectMake(margin,height-37,width-margin*2,26);
     [self.posterGrid.collectionViewLayout invalidateLayout];
@@ -430,6 +457,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     self.playerController=nil;self.workingStreams=nil;self.activePlayback=nil;
     self.liveSelection=nil;self.liveFullscreen.hidden=YES;
+    self.liveRetryButton.hidden=YES;self.livePauseButton.hidden=YES;
+    self.liveLastFailure=nil;self.liveAttemptCount=0;
     self.liveMessage.text=@"Selecione um canal para iniciar a prévia.";
 }
 - (void)openLiveFullscreen {
@@ -439,6 +468,19 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.liveFullscreenController=full;
     [self presentViewController:full animated:YES completion:nil];
 }
+- (void)retryLiveSelectedChannel {
+    if(self.liveSelection)[self playLiveSelection:self.liveSelection];
+}
+- (void)toggleLivePlayback {
+    if(!self.moviePlayer)return;
+    if(self.moviePlayer.rate>0){
+        [self.moviePlayer pause];
+        [self.livePauseButton setTitle:@"Continuar" forState:UIControlStateNormal];
+    }else{
+        [self.moviePlayer play];
+        [self.livePauseButton setTitle:@"Pausar" forState:UIControlStateNormal];
+    }
+}
 - (void)playLiveSelection:(NSDictionary *)item {
     if(!item)return;
     [self.streamChecker cancel];
@@ -446,7 +488,9 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.liveSelection=item;
     self.liveTitle.text=[NSString stringWithFormat:@"AO VIVO · %@",[self str:item[@"name"]]];
     self.liveMessage.text=@"Procurando transmissão...";
-    self.liveFullscreen.hidden=YES;
+    self.liveLastFailure=nil;self.liveAttemptCount=0;
+    self.liveFullscreen.hidden=YES;self.liveRetryButton.hidden=YES;
+    self.livePauseButton.hidden=YES;
     [self resolveStreams:item];
 }
 - (void)setSelectedTab {
@@ -1366,20 +1410,28 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(live){
         // Live endpoints can reject Range even when a native HLS player can open
         // the playlist. Avoid blocking a playable channel behind a 2 KB probe.
-        NSMutableArray *direct=[NSMutableArray array];
+        NSMutableArray *hls=[NSMutableArray array],*other=[NSMutableArray array];
+        NSMutableSet *seen=[NSMutableSet set];
         for(NSDictionary *candidate in candidates){
-            if(direct.count>=16)break;
+            if(hls.count+other.count>=16)break;
             NSURL *url=[NSURL URLWithString:[self str:candidate[@"_url"]]];
             if(!url.host)continue;
             NSString *path=url.path.lowercaseString;
             if([path hasSuffix:@".mpd"]||[path hasSuffix:@".mkv"]||
-               [path hasSuffix:@".webm"])continue;
-            [direct addObject:candidate];
+                [path hasSuffix:@".webm"])continue;
+            NSString *link=[self str:candidate[@"_url"]];
+            if([seen containsObject:link])continue;
+            [seen addObject:link];
+            NSString *label=[self str:candidate[@"_label"]].lowercaseString;
+            if([path hasSuffix:@".m3u8"]||[label containsString:@"m3u8"]||
+               [label containsString:@"hls"])[hls addObject:candidate];
+            else [other addObject:candidate];
         }
+        NSArray *direct=[hls arrayByAddingObjectsFromArray:other];
         self.streamChecker=nil;
         if(!direct.count){
-            self.liveMessage.text=@"Nenhuma URL de canal suportada pelo iOS 9.";
-            return;
+            self.liveMessage.text=@"Nenhuma URL HTTP/HLS foi retornada para este canal.";
+            self.liveRetryButton.hidden=NO;return;
         }
         self.workingStreams=direct;
         self.selectedMedia=item;
@@ -1436,6 +1488,9 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(self.observedPlayerItem)
         [[NSNotificationCenter defaultCenter] removeObserver:self name:nil object:self.observedPlayerItem];
     self.observedPlayerItem=nil;
+    self.liveVideoLayer.player=nil;
+    [self.liveVideoLayer removeFromSuperlayer];
+    self.liveVideoLayer=nil;
     [self.moviePlayer pause];
     if(self.playerController)self.playerController.player=nil;
     self.moviePlayer=nil;
@@ -1464,6 +1519,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.hasPlayerObservation=YES;
     self.moviePlayer=[AVPlayer playerWithPlayerItem:playerItem];
     if(live){
+        self.liveAttemptCount++;
+        self.liveMessage.text=[NSString stringWithFormat:@"Conectando... fonte %lu de %lu",
+            (unsigned long)(self.playingSourceIndex+1),
+            (unsigned long)self.workingStreams.count];
+        self.liveRetryButton.hidden=YES;
         // A live stream can report Ready but never deliver a playable buffer.
         // Allow extra A5 startup time and move on only when it is still stalled.
         AVPlayerItem *expected=playerItem;
@@ -1482,27 +1542,25 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         name:AVPlayerItemFailedToPlayToEndTimeNotification object:playerItem];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemStalled:)
         name:AVPlayerItemPlaybackStalledNotification object:playerItem];
-    if(!self.playerController){
-        self.playerController=[[AVPlayerViewController alloc]init];
-        self.playerController.showsPlaybackControls=YES;
-        if(live&&[self showingLiveGuide]){
-            [self addChildViewController:self.playerController];
-            self.playerController.view.frame=self.liveScreen.bounds;
-            self.playerController.view.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
-            [self.liveScreen addSubview:self.playerController.view];
-            [self.playerController didMoveToParentViewController:self];
-        }else{
+    if(live&&[self showingLiveGuide]){
+        // Separate lightweight Telares live UI, backed by the iOS 9 hardware decoder.
+        self.liveVideoLayer=[AVPlayerLayer playerLayerWithPlayer:self.moviePlayer];
+        self.liveVideoLayer.frame=self.liveScreen.bounds;
+        self.liveVideoLayer.videoGravity=AVLayerVideoGravityResizeAspect;
+        [self.liveScreen.layer addSublayer:self.liveVideoLayer];
+        self.liveFullscreen.hidden=NO;self.livePauseButton.hidden=NO;
+        [self.livePauseButton setTitle:@"Pausar" forState:UIControlStateNormal];
+    }else{
+        if(!self.playerController){
+            self.playerController=[[AVPlayerViewController alloc]init];
+            self.playerController.showsPlaybackControls=YES;
             __weak ShockViewController *weakSelf=self;
             [self presentViewController:self.playerController animated:YES completion:^{
                 ShockViewController *strong=weakSelf;
                 if(strong&&strong.moviePlayer)[strong.moviePlayer play];
             }];
         }
-    }
-    self.playerController.player=self.moviePlayer;
-    if(live&&[self showingLiveGuide]){
-        self.liveMessage.text=@"Conectando à transmissão...";
-        self.liveFullscreen.hidden=NO;
+        self.playerController.player=self.moviePlayer;
     }
     [self.moviePlayer play];
 }
