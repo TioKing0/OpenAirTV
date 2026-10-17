@@ -627,9 +627,12 @@ public final class MainActivity extends Activity {
                             for(Media candidate:incoming){
                                 Media prior=null;
                                 for(Media existing:knownItems){
-                                    if(existing.id.equals(candidate.id)&&existing.type.equals(candidate.type)){
-                                        prior=existing;break;
-                                    }
+                                    // Stremio identifiers may overlap between a TV catalogue
+                                    // and ordinary VOD. Never merge live and VOD records.
+                                    if(!existing.id.equals(candidate.id)||!existing.type.equals(candidate.type))continue;
+                                    if(isChannel(existing)!=isChannel(candidate))continue;
+                                    if(isChannel(candidate)&&!existing.source.equals(candidate.source))continue;
+                                    prior=existing;break;
                                 }
                                 if(prior==null)knownItems.add(candidate);
                                 else{
@@ -648,7 +651,11 @@ public final class MainActivity extends Activity {
             }
         });
     }
-    private String identity(Media item){return item.type+"|"+item.id;}
+    private String identity(Media item){
+        // Keep established VOD keys for favorites/resume, but namespace live channels.
+        return isChannel(item)?"live|"+item.type+"|"+item.id+"|"+item.source:
+            item.type+"|"+item.id;
+    }
     private boolean isSeries(Media m){return !isChannel(m)&&"series".equals(m.displayType.isEmpty()?m.type:m.displayType);}
     private boolean isFilm(Media m){return !isChannel(m)&&"movie".equals(m.displayType.isEmpty()?m.type:m.displayType);}
     private boolean isChannel(Media m){
@@ -1295,9 +1302,14 @@ public final class MainActivity extends Activity {
                         if(request!=categoryGeneration)return;
                         JSONObject c=cats.optJSONObject(i);if(c==null)continue;
                         String type=c.optString("type",""),id=c.optString("id","");
-                        if(!("movie".equals(type)||"series".equals(type))||!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
+                        if(!id.matches("[a-zA-Z0-9_.:-]{1,100}"))continue;
                         if(isBroadcastCatalog(manifest,c,source))continue;
                         String name=c.optString("name","");
+                        String lower=(name+" "+id).toLowerCase(Locale.ROOT);
+                        boolean nativeType="movie".equals(type)||"series".equals(type);
+                        boolean customType=!nativeType&&(lower.contains("movie")||lower.contains("film")||
+                             lower.contains("series")||lower.contains("show"));
+                        if(!nativeType&&!customType)continue;
                         boolean providerCatalog=categoryMatch(category,provider,name,id,"");
                         String argument=genreArgument(c.optJSONArray("extra"),category);
                         if(!providerCatalog&&argument.isEmpty()&&!genreCategory(category))continue;
@@ -1320,7 +1332,10 @@ public final class MainActivity extends Activity {
                                 if(!providerCatalog&&argument.isEmpty()&&
                                    !categoryMatch(category,provider,name,id,genre.toString()))continue;
                                 Media media=new Media();media.id=mid;media.name=title;
-                                media.type=json.optString("type",type);
+                                // The manifest's type is required for stream/meta endpoint calls.
+                                media.type=type;
+                                media.displayType=customType?
+                                    (lower.contains("series")||lower.contains("show")?"series":"movie"):type;
                                 media.poster=json.optString("poster","");
                                 media.description=json.optString("description","");
                                 media.origin=provider;media.catalogId=id;
