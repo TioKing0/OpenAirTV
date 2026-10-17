@@ -788,6 +788,12 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     NSString *type = [self str:item[@"type"]];
     NSString *ident = [self str:item[@"id"]];
     NSString *episode = [self str:item[@"_episode"]];
+    if([self isLiveItem:item]){
+        // Keep live and VOD records separate even when an addon uses type=series
+        // with the same ID. Do not change the existing saved VOD key format.
+        return [NSString stringWithFormat:@"live|%@|%@|%@|%@",type,ident,
+            [self str:item[@"_base"]],episode];
+    }
     return [NSString stringWithFormat:@"%@|%@|%@",type,ident,episode];
 }
 - (NSString *)pathEncode:(NSString *)value {

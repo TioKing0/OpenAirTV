@@ -172,4 +172,17 @@ class CatalogTest(unittest.TestCase):
         self.assertIn('!strong.liveVideoLayer.readyForDisplay',ios)
         self.assertIn('self.playerController.showsPlaybackControls=YES',ios)
 
+    def test_live_and_vod_same_stremio_identifier_remain_distinct(self):
+        movie={"type":"series","id":"shared-id","name":"Série","_kind":"series"}
+        live={"type":"series","id":"shared-id","name":"Canal","_kind":"tv","_base":"https://iptv.example/"}
+        self.assertEqual(len(catalog.unique([movie,live])),2)
+        self.assertNotEqual(catalog.key(movie),catalog.key(live))
+        self.assertEqual(len(catalog.unique([live,dict(live)])),1)
+    def test_ios_live_uses_separate_identity_namespace(self):
+        root=pathlib.Path(__file__).resolve().parents[3]
+        source=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
+        self.assertIn('if([self isLiveItem:item]){',source)
+        self.assertIn('@"live|%@|%@|%@|%@"',source)
+        self.assertIn('return [NSString stringWithFormat:@"%@|%@|%@",type,ident,episode];',source)
+
 if __name__=="__main__":unittest.main()

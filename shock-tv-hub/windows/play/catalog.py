@@ -48,7 +48,12 @@ def supports(m,resource,typ,identifier):
             return True
     return False
 
-def key(item): return str(item.get("type",""))+"|"+str(item.get("id",""))
+def key(item):
+    typ=str(item.get("type",""))
+    ident=str(item.get("id",""))
+    if item.get("_kind")=="tv":
+        return "live|"+typ+"|"+ident+"|"+str(item.get("_base",""))
+    return typ+"|"+ident
 
 def unique(items):
     used=set();out=[]
