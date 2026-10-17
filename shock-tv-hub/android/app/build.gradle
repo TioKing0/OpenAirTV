@@ -6,8 +6,8 @@ android {
     applicationId 'br.com.shocktv'
     minSdk 23
     targetSdk 34
-    versionCode 20
-    versionName '1.0.0-rc11'
+    versionCode 21
+    versionName '1.0.0-rc12'
   }
   flavorDimensions 'device'
   productFlavors {
@@ -18,7 +18,7 @@ android {
     mobile {
       dimension 'device'
       applicationId 'br.com.telares.play'
-      versionName '0.1.0-rc4'
+      versionName '0.1.0-rc5'
       buildConfigField 'boolean', 'MOBILE_UI', 'true'
     }
   }

@@ -63,3 +63,8 @@ O erro NSURLErrorDomain -1008 é NSURLErrorResourceUnavailable, não exclusivame
 - iOS 9: mantém AVPlayer nativo, HLS direto sem bloquear em checagem Range, fallback limitado e tratamento de erro sem URL exposta. `CFBundleDisplayName=Telares Play`; identificador técnico legado `br.com.shocktv.legacy` permanece para atualizações.
 - Windows: `Telares Play` mantém a interface de três colunas e VLC integrado; chave de canais separada das entradas sob demanda. Os utilitários `Telares Install` são redistribuídos sem alterar sua finalidade.
 - Validação física obrigatória: fonte ao vivo compatível, troca de canal, filtro Série/Filme sem canal, retorno do player à lista, 20 min de reprodução e preservação de favoritos.
+
+
+## RC12: diagnóstico de transmissão ao vivo no iPad
+
+A falha `NSURLErrorDomain -1008` indica recurso não disponível para o AVPlayer. Sozinha **não prova codec incompatível**. O cliente mostra mensagens separadas para HTTP 401/403 (necessidade de autorização), 404/410 (recurso inexistente), 5xx (falha da origem) e outros erros. Apenas o domínio do servidor é exibido, sem revelar tokens da URL. Na tentativa de identificar variantes HLS, o iPad consulta a playlist com GET normal, sem cabeçalho `Range`, que pode provocar HTTP 416 ou respostas inválidas em alguns provedores. A tentativa só procura alternativas anunciadas pela origem; não remove DRM ou cria sinais inexistentes. Canais com apenas uma fonte ausente continuarão indisponíveis. Preservadas três colunas, categorias, filmes, séries, gêneros e seleção automática VOD. Os utilitários Telares Install acompanham o lote mas não possuem reprodução.

@@ -22,16 +22,16 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --prefix=Telares-Source/ \
-            -o dist/Telares-RC11-Complete-Source.zip HEAD
-          unzip -t dist/Telares-RC11-Complete-Source.zip | tail -n 2
-          unzip -Z1 dist/Telares-RC11-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/android/app/build.gradle'
-          unzip -Z1 dist/Telares-RC11-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/ios/Makefile'
-          unzip -Z1 dist/Telares-RC11-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/windows/main.py'
-          unzip -Z1 dist/Telares-RC11-Complete-Source.zip | grep -q 'Telares-Source/legacy-tv-hub/widget/config.xml'
+            -o dist/Telares-RC12-Complete-Source.zip HEAD
+          unzip -t dist/Telares-RC12-Complete-Source.zip | tail -n 2
+          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/android/app/build.gradle'
+          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/ios/Makefile'
+          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/windows/main.py'
+          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/legacy-tv-hub/widget/config.xml'
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-RC11-Complete-Source-ZIP
-          path: dist/Telares-RC11-Complete-Source.zip
+          name: Telares-RC12-Complete-Source-ZIP
+          path: dist/Telares-RC12-Complete-Source.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -105,6 +105,19 @@ jobs:
           grep -q 'recordLivePlayerFailure:' shock-tv-hub/ios/ShockViewController.m
           grep -q 'retryLiveSelectedChannel' shock-tv-hub/ios/ShockViewController.m
           grep -q 'self.playerController.showsPlaybackControls=YES' shock-tv-hub/ios/ShockViewController.m
+      - name: Verify iPad HLS recovery and accurate diagnostics
+        run: |
+          grep -Fq 'request.HTTPMethod=@"GET"' shock-tv-hub/ios/ShockViewController.m
+          grep -Fq 'NSURLErrorResourceUnavailable' shock-tv-hub/ios/ShockViewController.m
+          grep -Fq 'Servidor: %@' shock-tv-hub/ios/ShockViewController.m
+          if grep -Fq 'request setValue:@"bytes=0-32767"' shock-tv-hub/ios/ShockViewController.m; then
+            echo "HLS playlist recovery must not send Range requests"
+            exit 1
+          fi
+          if grep -Fq 'alertControllerWithTitle:@"Shock TV"' shock-tv-hub/ios/ShockViewController.m; then
+            echo "Old visible brand in iPad alerts"
+            exit 1
+          fi
       - name: Compile ARMv7 iOS 9 application
         env:
           THEOS: ${{ github.workspace }}/theos
@@ -125,12 +138,12 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry Telares-Play-iOS9-v0.3.9-ARMv7.ipa Payload)
-          unzip -t dist/Telares-Play-iOS9-v0.3.9-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry Telares-Play-iOS9-v0.3.10-ARMv7.ipa Payload)
+          unzip -t dist/Telares-Play-iOS9-v0.3.10-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-iOS9-v0.3.9-ARMv7-IPA
-          path: dist/Telares-Play-iOS9-v0.3.9-ARMv7.ipa
+          name: Telares-Play-iOS9-v0.3.10-ARMv7-IPA
+          path: dist/Telares-Play-iOS9-v0.3.10-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30

@@ -1,36 +1,36 @@
 {
   "brand": "TELARES",
-  "batch": "telares-live-guide-rc11",
+  "batch": "telares-hls-playback-diagnostics-rc12",
   "date": "2026-10-17",
-  "feature": "Distinguir a identidade de canais ao vivo de VOD mesmo quando addons utilizam id e type idênticos; evitar fusão de canais com séries no Android, iPad e Windows; prévia ao vivo sem som embutida na Android TV com limpeza segura de player e troca entre URLs candidatas; preservar categorias de filmes, séries e anime.",
+  "feature": "Melhor diagnóstico NSURLErrorDomain -1008 de canais ao vivo no iPad; recuperação da playlist HLS via GET sem Range; distinguir 401/403/404/5xx; expor somente host do servidor; demais interfaces e filtros preservados",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc11",
+      "version": "1.0.0-rc12",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.9",
+      "version": "0.3.10",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.8"
+      "version": "0.2.9"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.8"
+      "version": "0.2.9"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc4",
+      "version": "0.1.0-rc5",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -150,7 +150,10 @@
     "decoder": "AVFoundation hardware H.264/AAC (iOS 9 ARMv7)",
     "independentDecoder": "Not bundled: MobileVLCKit binary compatibility and licenses require separate validation",
     "sourceOrder": "HLS first, other supported HTTP URLs fallback",
-    "errorDisplay": "AVFoundation domain and code, no signed stream URLs"
+    "errorDisplay": "Diagnóstico por NSURLErrorDomain, HTTP status e host seguro; não revelar URL/token",
+    "liveHLSRecovery": "GET normal no manifesto HLS, sem Range; variantes H.264/AAC quando anunciadas",
+    "knownLimit": "Sem fonte autorizada e utilizável, não é possível tocar canais (especialmente protegidos/DRM) apenas pelo cliente",
+    "qa": "Build CI não substitui teste de reprodução em iPad mini 1; HBO do print ainda não confirmado"
   },
   "liveDiagnostics": {
     "errorMinus1008": "NSURLErrorResourceUnavailable; resource may be missing or not decodable",
