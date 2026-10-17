@@ -1536,9 +1536,15 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 ShockViewController *strong=weakSelf;
                 if(!strong||strong.closingPlayer||strong.observedPlayerItem!=expected)return;
                 BOOL buffered=expected.playbackBufferFull||expected.playbackLikelyToKeepUp;
-                if(expected.status!=AVPlayerItemStatusReadyToPlay||
+                // A ready AVPlayerItem can still be black. Confirm first frame,
+                // not merely a playing rate. Fullscreen uses its own video view.
+                BOOL preview=[strong showingLiveGuide]&&
+                    strong.presentedViewController!=strong.liveFullscreenController;
+                BOOL noPicture=preview&&strong.liveVideoLayer&&!strong.liveVideoLayer.readyForDisplay;
+                if(expected.status!=AVPlayerItemStatusReadyToPlay||noPicture||
                    (strong.moviePlayer.rate<=0&&!buffered)){
-                    [strong recordLivePlayerFailure:expected.error stage:@"Tempo de conexão excedido"];
+                    [strong recordLivePlayerFailure:expected.error stage:
+                        noPicture?@"Sem imagem após conexão":@"Tempo de conexão excedido"];
                     [strong tryNextPlaybackSource];
                 }
             });
@@ -1639,12 +1645,15 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                     Float64 seconds=CMTimeGetSeconds(time);
                     if(isfinite(seconds)&&seconds>1){
                         strong.playbackStarted=YES;
-                        [strong recordProgress:seconds];
+                        if([strong isLiveItem:strong.activePlayback]){
+                            if(strong.liveVideoLayer.readyForDisplay)
+                                strong.liveMessage.text=@"Transmissão em reprodução.";
+                        }else [strong recordProgress:seconds];
                     }
                 }];
         }
         if([self isLiveItem:self.activePlayback]){
-            self.liveMessage.text=@"Fonte conectada. Use Tela cheia para ampliar.";
+            self.liveMessage.text=@"Fonte carregada. Aguardando primeira imagem...";
             self.liveRetryButton.hidden=YES;
         }
     }else if(item.status==AVPlayerItemStatusFailed){

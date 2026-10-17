@@ -166,7 +166,10 @@ class CatalogTest(unittest.TestCase):
         root=pathlib.Path(__file__).resolve().parents[3]
         ios=(root/"ios/ShockViewController.m").read_text(encoding="utf-8")
         self.assertIn('if(live){\n        // Live endpoints can reject Range',ios)
-        self.assertIn('BOOL embedded=self.playerController.parentViewController==self;',ios)
-        self.assertIn('self.playerController.parentViewController!=self',ios)
+        self.assertIn('BOOL embedded=[self isLiveItem:self.activePlayback]&&[self showingLiveGuide];',ios)
+        self.assertIn('[AVPlayerLayer playerLayerWithPlayer:self.moviePlayer]',ios)
+        self.assertIn('self.liveRetryButton.hidden=NO;',ios)
+        self.assertIn('!strong.liveVideoLayer.readyForDisplay',ios)
+        self.assertIn('self.playerController.showsPlaybackControls=YES',ios)
 
 if __name__=="__main__":unittest.main()
