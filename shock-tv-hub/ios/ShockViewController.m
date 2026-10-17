@@ -1496,6 +1496,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.liveVideoLayer=nil;
     [self.moviePlayer pause];
     if(self.playerController)self.playerController.player=nil;
+    if(self.liveFullscreenController)self.liveFullscreenController.player=nil;
     self.moviePlayer=nil;
     self.playbackStarted=NO;
 }
@@ -1737,6 +1738,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         ShockViewController *strong=weakSelf;
         if(!strong)return;
         strong.playerController=nil;
+        strong.liveFullscreenController=nil;
         strong.playerSourceButton=nil;
         strong.activePlayback=nil;
         strong.workingStreams=nil;
@@ -1748,7 +1750,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 @"Não foi possível iniciar este canal.";
         }else if(error.length)[strong notice:error];
     };
-    if(embedded||!self.playerController.presentingViewController)finish();
+    if(embedded&&self.liveFullscreenController&&
+       self.presentedViewController==self.liveFullscreenController)
+        [self dismissViewControllerAnimated:YES completion:finish];
+    else if(embedded||!self.playerController.presentingViewController)finish();
     else [self.playerController dismissViewControllerAnimated:YES completion:finish];
 }
 - (void)recordProgress:(double)seconds {
