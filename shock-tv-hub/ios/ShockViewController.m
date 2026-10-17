@@ -1534,8 +1534,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 if(!strong||strong.closingPlayer||strong.observedPlayerItem!=expected)return;
                 BOOL buffered=expected.playbackBufferFull||expected.playbackLikelyToKeepUp;
                 if(expected.status!=AVPlayerItemStatusReadyToPlay||
-                   (strong.moviePlayer.rate<=0&&!buffered))
+                   (strong.moviePlayer.rate<=0&&!buffered)){
+                    [strong recordLivePlayerFailure:expected.error stage:@"Tempo de conexão excedido"];
                     [strong tryNextPlaybackSource];
+                }
             });
     }
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(playerItemFailed:)
@@ -1549,6 +1551,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         self.liveVideoLayer.videoGravity=AVLayerVideoGravityResizeAspect;
         [self.liveScreen.layer addSublayer:self.liveVideoLayer];
         self.liveFullscreen.hidden=NO;self.livePauseButton.hidden=NO;
+        if(self.liveFullscreenController&&self.presentedViewController==self.liveFullscreenController)
+            self.liveFullscreenController.player=self.moviePlayer;
         [self.livePauseButton setTitle:@"Pausar" forState:UIControlStateNormal];
     }else{
         if(!self.playerController){
@@ -1636,13 +1640,30 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                     }
                 }];
         }
+        if([self isLiveItem:self.activePlayback]){
+            self.liveMessage.text=@"Fonte conectada. Use Tela cheia para ampliar.";
+            self.liveRetryButton.hidden=YES;
+        }
     }else if(item.status==AVPlayerItemStatusFailed){
+        [self recordLivePlayerFailure:item.error stage:@"Decodificação"];
         [self tryNextPlaybackSource];
     }
 }
+- (void)recordLivePlayerFailure:(NSError *)error stage:(NSString *)stage {
+    if(![self isLiveItem:self.activePlayback])return;
+    NSString *reason=stage.length?stage:@"Erro de transmissão";
+    if(error)
+        reason=[reason stringByAppendingFormat:@" (%@, código %ld)",
+            error.domain?:@"iOS",(long)error.code];
+    self.liveLastFailure=reason;
+    // Never expose a stream URL: it can include signed access tokens.
+    NSLog(@"[Telares Live] %@",reason);
+}
 - (void)playerItemFailed:(NSNotification *)note {
-    if(note.object==self.observedPlayerItem&&!self.closingPlayer)
+    if(note.object==self.observedPlayerItem&&!self.closingPlayer){
+        [self recordLivePlayerFailure:self.observedPlayerItem.error stage:@"Interrupção"];
         [self tryNextPlaybackSource];
+    }
 }
 - (void)playerItemStalled:(NSNotification *)note {
     if(note.object!=self.observedPlayerItem||self.closingPlayer)return;
@@ -1652,8 +1673,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
        dispatch_get_main_queue(),^{
          ShockViewController *strong=weakSelf;
          if(!strong||strong.closingPlayer||strong.observedPlayerItem!=stalled)return;
-         if(strong.moviePlayer.rate<=0&&stalled.playbackBufferEmpty)
+         if(strong.moviePlayer.rate<=0&&stalled.playbackBufferEmpty){
+             [strong recordLivePlayerFailure:stalled.error stage:@"Buffer esgotado"];
              [strong tryNextPlaybackSource];
+         }
        });
 }
 - (void)tryNextPlaybackSource {
@@ -1664,10 +1687,19 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         self.playingSourceIndex=next;
         self.status.text=[NSString stringWithFormat:@"Fonte instável. Tentando alternativa %ld...",
             (long)(next+1)];
+        if([self isLiveItem:self.activePlayback])
+            self.liveMessage.text=[NSString stringWithFormat:@"Fonte %ld/%lu falhou. Tentando alternativa...",
+                (long)next,(unsigned long)self.workingStreams.count];
         [self playStream:self.workingStreams[(NSUInteger)next]];
         return;
     }
-    [self closePlayerWithError:@"As fontes verificadas falharam durante a reprodução. O AVPlayer do iOS 9 pode não suportar este formato."];
+    if([self isLiveItem:self.activePlayback]){
+        NSString *reason=self.liveLastFailure?:@"Formato, rede ou origem incompatível";
+        [self closePlayerWithError:[NSString stringWithFormat:
+            @"Fontes esgotadas (%lu). %@. iOS 9 requer HLS H.264/AAC compatível.",
+            (unsigned long)self.workingStreams.count,reason]];
+    }else
+        [self closePlayerWithError:@"As fontes verificadas falharam durante a reprodução. O AVPlayer do iOS 9 pode não suportar este formato."];
 }
 - (void)saveCurrentPosition {
     if(!self.playbackStarted||!self.moviePlayer||!self.activePlayback)return;
@@ -1683,7 +1715,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.closingPlayer=YES;
     [self cleanCurrentPlayer];
     __weak ShockViewController *weakSelf=self;
-    BOOL embedded=self.playerController.parentViewController==self;
+    BOOL embedded=[self isLiveItem:self.activePlayback]&&[self showingLiveGuide];
     if(embedded){
         [self.playerController willMoveToParentViewController:nil];
         [self.playerController.view removeFromSuperview];
@@ -1698,7 +1730,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         strong.workingStreams=nil;
         strong.closingPlayer=NO;
         if(embedded){
-            strong.liveFullscreen.hidden=YES;
+            strong.liveFullscreen.hidden=YES;strong.livePauseButton.hidden=YES;
+            strong.liveRetryButton.hidden=NO;
             strong.liveMessage.text=error.length?error:
                 @"Não foi possível iniciar este canal.";
         }else if(error.length)[strong notice:error];
