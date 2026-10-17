@@ -46,3 +46,7 @@ A categoria **Anime** foi retirada dos filtros de TV, iPad e Windows Play por re
 - Canais podem rejeitar `Range`: iPad usa URLs HTTP/HLS com falha automática; VLC Windows tenta a fonte antes de filtrar pelo pré-teste; Android TV permite candidatos live diretos após probe inconclusivo.
 - Nomes visíveis são Telares, mas identificadores históricos internos ShockTV devem permanecer para permitir atualização dos usuários.
 - A prova final requer teste no aparelho com stream autorizado (a compilação isolada não valida codec, token expiração ou disponibilidade real do canal).
+
+## RC9: player Ao vivo dedicado no iPad iOS 9
+
+A interface do Ao vivo agora usa `AVPlayerLayer` embutida na prévia da Telares, com Pausar/Continuar, tentar novamente, HLS primeiro, erros de domínio/código AVFoundation e tela cheia com o controle nativo; o player VOD de filmes/séries foi preservado. O decodificador permanece AVFoundation para ARMv7: **isso não acrescenta suporte a codecs que o iOS 9 não reconhece**. Uma segunda engine baseada em MobileVLCKit foi pesquisada, mas integração ARMv7/SDK/licenças e reprodução real precisam ser verificadas antes de integrar à versão estável. Android TV, Android telefone e Windows foram apenas republicados no mesmo lote, sem alteração no motor de vídeo. Assinatura temporária e addons indisponíveis continuam limitantes.

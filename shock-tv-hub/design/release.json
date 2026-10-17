@@ -1,36 +1,36 @@
 {
   "brand": "TELARES",
-  "batch": "telares-android-mobile-rc8",
+  "batch": "telares-ipad-live-player-rc9",
   "date": "2026-10-16",
-  "feature": "Telares Play Android smartphone/tablet com interface touch responsiva, orientação adaptativa, live guide vertical, preservando TV, iPad e Windows",
+  "feature": "Player Ao vivo separado no iPad, AVPlayerLayer próprio com controles Pausar/Continuar, Tela cheia, Tentar novamente, HLS prioritário, diagnóstico de erros AVFoundation e fallback; VOD mantém o AVPlayerViewController. Windows/Android reempacotados no mesmo lote.",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc8",
+      "version": "1.0.0-rc9",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.6",
+      "version": "0.3.7",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc1",
+      "version": "0.1.0-rc2",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -144,5 +144,12 @@
     "Mobile layouts: telas compactas até 699dp com bottom navigation, 700dp+ abas superiores; guia ao vivo compacto até 839dp; player permite rotação.",
     "A variante mobile foi compilada sem teste físico em celulares com notch, barra gestual, telas dobráveis ou modos multijanela; validar em hardware."
   ],
-  "testStatus": "GitHub CI build pending; physical decoding unverified"
+  "testStatus": "GitHub CI build pending; physical decoding unverified",
+  "iosLivePlayer": {
+    "ui": "Own AVPlayerLayer preview, pause/resume/retry + native fullscreen",
+    "decoder": "AVFoundation hardware H.264/AAC (iOS 9 ARMv7)",
+    "independentDecoder": "Not bundled: MobileVLCKit binary compatibility and licenses require separate validation",
+    "sourceOrder": "HLS first, other supported HTTP URLs fallback",
+    "errorDisplay": "AVFoundation domain and code, no signed stream URLs"
+  }
 }
