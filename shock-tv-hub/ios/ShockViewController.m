@@ -1713,7 +1713,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
     config.timeoutIntervalForResource=8;
     NSURLSession *session=[NSURLSession sessionWithConfiguration:config];
-    [[[session dataTaskWithRequest:request completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
+    [[session dataTaskWithRequest:request completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
         NSMutableArray *variants=[NSMutableArray array];
         NSString *reason=@"O servidor não anunciou uma variante H.264.";
         NSHTTPURLResponse *http=[response isKindOfClass:[NSHTTPURLResponse class]]?(id)response:nil;
