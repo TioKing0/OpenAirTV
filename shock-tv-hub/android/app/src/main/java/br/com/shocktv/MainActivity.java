@@ -81,6 +81,12 @@ public final class MainActivity extends Activity {
     private int categoryGeneration=0;
     private String liveGroupFilter="Todos os canais";
     private Media liveSelectedChannel=null;
+    private androidx.media3.exoplayer.ExoPlayer livePreviewPlayer;
+    private androidx.media3.ui.PlayerView livePreviewView;
+    private TextView livePreviewStatus;
+    private String livePreviewKey="";
+    private int livePreviewGeneration=0, livePreviewOptionIndex=0;
+    private final ArrayList<String> livePreviewUrls=new ArrayList<>();
     private final ArrayList<Media> categoryResults=new ArrayList<>();
     private TextView categoryStatus;
     private final ArrayList<String> sources=new ArrayList<>();
@@ -695,6 +701,12 @@ public final class MainActivity extends Activity {
         Set<String> shown=new HashSet<>();
         if("aovivo".equals(activeSection)){
             buildLiveChannelGuide();
+        }else{
+            stopInlinePreview();
+            // The remaining VOD lanes are handled by the branch below.
+        }
+        if("aovivo".equals(activeSection)){
+            return;
         }else if("filmes".equals(activeSection)||"series".equals(activeSection)){
             boolean movie="filmes".equals(activeSection);
             MediaFilter type=m->movie?isFilm(m):isSeries(m);
@@ -717,6 +729,115 @@ public final class MainActivity extends Activity {
             empty.setPadding(dp(5),dp(25),dp(5),dp(25));catalogArea.addView(empty);
         }
     }
+    /** A muted live preview runs independently from the fullscreen player and is released on navigation. */
+    private void stopInlinePreview(){
+        livePreviewGeneration++;
+        if(livePreviewView!=null)livePreviewView.setPlayer(null);
+        if(livePreviewPlayer!=null){
+            livePreviewPlayer.stop();livePreviewPlayer.release();livePreviewPlayer=null;
+        }
+        livePreviewView=null;
+        livePreviewStatus=null;
+        livePreviewKey="";
+        livePreviewUrls.clear();
+    }
+    private void showInlineSource(int request,int next){
+        if(request!=livePreviewGeneration||livePreviewPlayer==null)return;
+        if(next>=livePreviewUrls.size()){
+            if(livePreviewStatus!=null)livePreviewStatus.setText(
+                "Prévia indisponível nesta fonte. Tente reproduzir em tela cheia ou escolha outro canal.");
+            livePreviewPlayer.stop();
+            return;
+        }
+        livePreviewOptionIndex=next;
+        String address=livePreviewUrls.get(next);
+        try{
+            androidx.media3.common.MediaItem.Builder builder=new androidx.media3.common.MediaItem.Builder()
+                .setUri(android.net.Uri.parse(address));
+            String low=address.toLowerCase(Locale.ROOT);
+            if(low.contains(".m3u8"))builder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8);
+            livePreviewPlayer.setMediaItem(builder.build());
+            livePreviewPlayer.prepare();
+            livePreviewPlayer.play();
+            if(livePreviewStatus!=null)
+                livePreviewStatus.setText("Conectando sinal "+(next+1)+" de "+livePreviewUrls.size()+"...");
+        }catch(Exception ex){showInlineSource(request,next+1);}
+    }
+    private void attachInlinePreview(Media channel,FrameLayout frame,TextView feedback){
+        if(BuildConfig.MOBILE_UI||channel==null)return;
+        String key=identity(channel);
+        if(livePreviewPlayer!=null&&key.equals(livePreviewKey)){
+            androidx.media3.ui.PlayerView playerView=new androidx.media3.ui.PlayerView(this);
+            playerView.setUseController(false);
+            playerView.setPlayer(livePreviewPlayer);
+            if(livePreviewView!=null)livePreviewView.setPlayer(null);
+            livePreviewView=playerView;
+            frame.addView(playerView,new FrameLayout.LayoutParams(-1,-1));
+            livePreviewStatus=feedback;
+            return;
+        }
+        stopInlinePreview();
+        livePreviewKey=key;
+        final int generation=livePreviewGeneration;
+        livePreviewStatus=feedback;
+        feedback.setText("Localizando prévia do canal...");
+        ArrayList<String> candidates=new ArrayList<>(sources);
+        pool.execute(()->{
+            ArrayList<String> urls=new ArrayList<>();
+            Set<String> seen=new HashSet<>();
+            // Prioritize the originating addon. Do not mistake a successful HTTP probe
+            // for confirmed playable video.
+            String sourceManifest=channel.source+"manifest.json";
+            if(candidates.remove(sourceManifest))candidates.add(0,sourceManifest);
+            for(String manifestUrl:candidates){
+                if(generation!=livePreviewGeneration||urls.size()>=8)return;
+                try{
+                    JSONObject mf=getManifest(manifestUrl);
+                    if(!supportsStreams(mf,channel.type,channel.id))continue;
+                    String root=manifestUrl.substring(0,manifestUrl.length()-"manifest.json".length());
+                    JSONObject data=getJson(root+"stream/"+encodePart(channel.type)+"/"+encodePart(channel.id)+".json");
+                    JSONArray streams=data.optJSONArray("streams");if(streams==null)continue;
+                    for(int i=0;i<streams.length()&&i<40&&urls.size()<8;i++){
+                        JSONObject entry=streams.optJSONObject(i);if(entry==null)continue;
+                        String url=entry.optString("url","");
+                        if(!isHttpMediaCandidate(url)||!seen.add(url))continue;
+                        JSONObject hints=entry.optJSONObject("behaviorHints");
+                        if(hints!=null&&hints.optJSONObject("proxyHeaders")!=null)continue;
+                        urls.add(url);
+                    }
+                }catch(Exception ignored){}
+            }
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed()||generation!=livePreviewGeneration||
+                   !"aovivo".equals(activeSection))return;
+                if(urls.isEmpty()){
+                    if(livePreviewStatus!=null)livePreviewStatus.setText(
+                        "O addon não forneceu sinal HTTP/HLS direto para prévia.");
+                    return;
+                }
+                livePreviewUrls.addAll(urls);
+                androidx.media3.exoplayer.ExoPlayer player=new androidx.media3.exoplayer.ExoPlayer.Builder(this).build();
+                livePreviewPlayer=player;
+                player.setVolume(0f); // Muted preview; fullscreen playback retains its own sound.
+                androidx.media3.ui.PlayerView view=new androidx.media3.ui.PlayerView(this);
+                view.setUseController(false);
+                livePreviewView=view;
+                view.setPlayer(player);
+                frame.addView(view,new FrameLayout.LayoutParams(-1,-1));
+                player.addListener(new androidx.media3.common.Player.Listener(){
+                    @Override public void onPlayerError(androidx.media3.common.PlaybackException error){
+                        ui.post(()->showInlineSource(generation,livePreviewOptionIndex+1));
+                    }
+                    @Override public void onIsPlayingChanged(boolean playing){
+                        if(generation==livePreviewGeneration&&playing&&livePreviewStatus!=null)
+                            livePreviewStatus.setText("Prévia ao vivo • sem áudio. Reproduzir abre em tela cheia.");
+                    }
+                });
+                showInlineSource(generation,0);
+            });
+        });
+    }
+
     /** TV guide: remote-friendly groups, channel list and program preview. */
     private String liveGroupOf(Media m){
         String title=normalizeCategory(m.name),origin=normalizeCategory(m.catalogId+" "+m.genre);
@@ -802,15 +923,22 @@ public final class MainActivity extends Activity {
             preview.addView(text("AO VIVO  •  "+liveGroupOf(selected),14,AQUA,true));
             TextView title=text(selected.name,25,Color.WHITE,true);
             title.setMaxLines(2);preview.addView(title);
+            FrameLayout monitor=new FrameLayout(this);
+            monitor.setBackgroundColor(0xff091420);
+            LinearLayout.LayoutParams img=new LinearLayout.LayoutParams(-1,0,1f);
+            img.topMargin=dp(12);img.bottomMargin=dp(10);
+            preview.addView(monitor,img);
             ImageView poster=new ImageView(this);
             poster.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            poster.setBackgroundColor(0xff091420);
-            LinearLayout.LayoutParams img=new LinearLayout.LayoutParams(-1,0,1f);
-            img.topMargin=dp(12);img.bottomMargin=dp(15);
-            preview.addView(poster,img);
+            monitor.addView(poster,new FrameLayout.LayoutParams(-1,-1));
             if(selected.poster.startsWith("https://"))loadPoster(selected.poster,poster);
-            preview.addView(text("Escolha Reproduzir para abrir o sinal em tela cheia. A disponibilidade depende do addon.",13,0xffa9c9d7,false));
-            Button play=button("▶  Reproduzir canal",()->details(selected));
+            TextView previewStatus=text("Prévia automática • som disponível em tela cheia.",13,0xffa9c9d7,false);
+            preview.addView(previewStatus);
+            attachInlinePreview(selected,monitor,previewStatus);
+            Button play=button("▶  Reproduzir canal",()->{
+                stopInlinePreview();
+                resolveItem(selected);
+            });
             LinearLayout.LayoutParams start=new LinearLayout.LayoutParams(-1,dp(50));
             start.topMargin=dp(14);preview.addView(play,start);
         }
@@ -1966,7 +2094,12 @@ public final class MainActivity extends Activity {
         }finally{connection.disconnect();}
     }
     @Override protected void onResume(){super.onResume();if(personal!=null)showPersonal();}
+    @Override protected void onPause(){
+        stopInlinePreview();
+        super.onPause();
+    }
     @Override protected void onDestroy(){
+        stopInlinePreview();
         searchGeneration++;
         if(searchFuture!=null)searchFuture.cancel(true);
         searchExecutor.shutdownNow();
