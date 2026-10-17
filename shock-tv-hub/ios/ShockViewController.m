@@ -115,6 +115,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,assign) NSInteger playingSourceIndex;
 @property(nonatomic,assign) NSUInteger streamRequestGeneration;
 @property(nonatomic,assign) BOOL liveVariantRecoveryAttempted;
+@property(nonatomic,assign) BOOL liveVariantRecoveryPending;
 @property(nonatomic,assign) BOOL hasPlayerObservation;
 @property(nonatomic,assign) BOOL playbackStarted;
 @property(nonatomic,assign) BOOL closingPlayer;
@@ -449,6 +450,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)stopLivePreview {
     self.streamRequestGeneration++;
+    self.liveVariantRecoveryPending=NO;
     [self.streamChecker cancel];self.streamChecker=nil;
     [self cleanCurrentPlayer];
     if(self.playerController.parentViewController==self){
@@ -462,6 +464,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.liveRetryButton.hidden=YES;self.livePauseButton.hidden=YES;
     self.liveLastFailure=nil;self.liveAttemptCount=0;
     self.liveVariantRecoveryAttempted=NO;
+    self.liveVariantRecoveryPending=NO;
     self.liveMessage.text=@"Selecione um canal para iniciar a prévia.";
 }
 - (void)openLiveFullscreen {
@@ -1759,7 +1762,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }] resume];
 }
 - (void)tryNextPlaybackSource {
-    if(self.closingPlayer)return;
+    if(self.closingPlayer||self.liveVariantRecoveryPending)return;
     [self saveCurrentPosition];
     NSInteger next=self.playingSourceIndex+1;
     if(next<(NSInteger)self.workingStreams.count&&next<16){
@@ -1774,6 +1777,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if([self isLiveItem:self.activePlayback]){
         if(!self.liveVariantRecoveryAttempted&&self.workingStreams.count){
             self.liveVariantRecoveryAttempted=YES;
+            self.liveVariantRecoveryPending=YES;
             NSUInteger generation=self.streamRequestGeneration;
             self.liveMessage.text=@"Verificando variantes HLS...";
             __weak ShockViewController *weakSelf=self;
@@ -1781,6 +1785,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 ShockViewController *strong=weakSelf;
                 if(!strong||generation!=strong.streamRequestGeneration||
                    strong.closingPlayer||![strong isLiveItem:strong.activePlayback])return;
+                strong.liveVariantRecoveryPending=NO;
                 if(variants.count){
                     NSUInteger start=strong.workingStreams.count;
                     strong.workingStreams=[strong.workingStreams arrayByAddingObjectsFromArray:variants];
