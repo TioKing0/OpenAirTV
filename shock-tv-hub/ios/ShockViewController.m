@@ -1692,6 +1692,9 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             (long)event.errorStatusCode];
     else if(event.errorStatusCode>=400)
         reason=[reason stringByAppendingFormat:@" · HTTP %ld",(long)event.errorStatusCode];
+    // Only show the host, never the URL path or signed query parameters.
+    NSString *host=[NSURL URLWithString:[self str:self.activePlayback[@"_url"]]].host;
+    if(host.length)reason=[reason stringByAppendingFormat:@" · Servidor: %@",host];
     self.liveLastFailure=reason;
     // Never expose a stream URL: it can include signed access tokens.
     NSLog(@"[Telares Live] %@",reason);
