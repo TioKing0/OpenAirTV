@@ -457,6 +457,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     self.playerController=nil;self.workingStreams=nil;self.activePlayback=nil;
     self.liveSelection=nil;self.liveFullscreen.hidden=YES;
+    self.liveFullscreenController=nil;
     self.liveRetryButton.hidden=YES;self.livePauseButton.hidden=YES;
     self.liveLastFailure=nil;self.liveAttemptCount=0;
     self.liveMessage.text=@"Selecione um canal para iniciar a prévia.";
@@ -466,6 +467,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     AVPlayerViewController *full=[[AVPlayerViewController alloc]init];
     full.player=self.moviePlayer;full.showsPlaybackControls=YES;
     self.liveFullscreenController=full;
+    // Avoid competing preview/fullscreen renderers on iOS 9.
+    self.liveVideoLayer.player=nil;
     [self presentViewController:full animated:YES completion:nil];
 }
 - (void)retryLiveSelectedChannel {
@@ -1771,6 +1774,11 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 }
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if([self showingLiveGuide]&&self.moviePlayer&&self.liveVideoLayer&&
+       !self.presentedViewController){
+        self.liveVideoLayer.player=self.moviePlayer;
+        self.liveFullscreenController=nil;
+    }
     // User left native AVPlayer controller with Done/Back: release all media resources.
     if(self.playerController&&self.playerController.parentViewController!=self&&
        !self.presentedViewController&&!self.closingPlayer){
