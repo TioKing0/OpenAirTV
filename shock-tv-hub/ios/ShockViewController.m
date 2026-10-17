@@ -1678,12 +1678,19 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     NSString *reason=stage.length?stage:@"Falha de transmissão";
     if([error.domain isEqualToString:NSURLErrorDomain]&&
        error.code==NSURLErrorResourceUnavailable)
-        reason=@"Recurso indisponível (-1008): URL, rede ou formato não utilizável";
+        reason=@"Recurso indisponível (-1008). Pode ser link expirado, playlist, rede ou formato não suportado; não confirma erro de codec";
     else if(error)
         reason=[reason stringByAppendingFormat:@" (%@, código %ld)",
             error.domain?:@"iOS",(long)error.code];
     AVPlayerItemErrorLogEvent *event=[[self.observedPlayerItem.errorLog events] lastObject];
-    if(event.errorStatusCode>=400&&event.errorStatusCode<=599)
+    if(event.errorStatusCode==401||event.errorStatusCode==403)
+        reason=@"Canal com acesso não autorizado (HTTP 401/403). Verifique sua assinatura.";
+    else if(event.errorStatusCode==404||event.errorStatusCode==410)
+        reason=@"A origem não encontrou o sinal ou segmento (HTTP 404/410).";
+    else if(event.errorStatusCode>=500&&event.errorStatusCode<=599)
+        reason=[NSString stringWithFormat:@"Servidor do canal indisponível (HTTP %ld).",
+            (long)event.errorStatusCode];
+    else if(event.errorStatusCode>=400)
         reason=[reason stringByAppendingFormat:@" · HTTP %ld",(long)event.errorStatusCode];
     self.liveLastFailure=reason;
     // Never expose a stream URL: it can include signed access tokens.
@@ -1718,22 +1725,28 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }
     NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url
         cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:7];
-    [request setValue:@"bytes=0-32767" forHTTPHeaderField:@"Range"];
+    // Some HLS CDNs reject Range on the playlist while accepting ordinary GET.
+    request.HTTPMethod=@"GET";
+    [request setValue:@"application/vnd.apple.mpegurl, application/x-mpegURL, */*"
+        forHTTPHeaderField:@"Accept"];
     NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
-    config.timeoutIntervalForResource=8;
+    config.timeoutIntervalForResource=12;
     NSURLSession *session=[NSURLSession sessionWithConfiguration:config];
     [[session dataTaskWithRequest:request completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
         NSMutableArray *variants=[NSMutableArray array];
-        NSString *reason=@"O servidor não anunciou uma variante H.264.";
+        NSString *reason=@"A playlist não anunciou uma variante de mídia compatível.";
         NSHTTPURLResponse *http=[response isKindOfClass:[NSHTTPURLResponse class]]?(id)response:nil;
         if(error)reason=@"Não foi possível ler a playlist da origem.";
+        else if(http.statusCode==401||http.statusCode==403)
+            reason=@"A playlist exige autorização para reprodução (HTTP 401/403).";
         else if(http.statusCode>=400)
             reason=[NSString stringWithFormat:@"Servidor recusou a playlist: HTTP %ld.",(long)http.statusCode];
         else if(data.length>0&&data.length<150000){
             NSString *playlist=[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding];
             if(![playlist hasPrefix:@"#EXTM3U"])
                 reason=@"A origem retornou dados que não são uma playlist HLS.";
-            else if([playlist containsString:@"METHOD=SAMPLE-AES"])
+            else if([playlist containsString:@"METHOD=SAMPLE-AES"]||
+                    [playlist containsString:@"KEYFORMAT=\"com.apple.streamingkeydelivery\""])
                 reason=@"Playlist exige criptografia ou proteção incompatível com o iOS 9.";
             else{
                 NSString *meta=nil;
