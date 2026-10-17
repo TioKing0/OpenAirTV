@@ -114,6 +114,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,strong) UIButton *playerSourceButton;
 @property(nonatomic,assign) NSInteger playingSourceIndex;
 @property(nonatomic,assign) NSUInteger streamRequestGeneration;
+@property(nonatomic,assign) BOOL liveVariantRecoveryAttempted;
 @property(nonatomic,assign) BOOL hasPlayerObservation;
 @property(nonatomic,assign) BOOL playbackStarted;
 @property(nonatomic,assign) BOOL closingPlayer;
@@ -460,6 +461,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     self.liveFullscreenController=nil;
     self.liveRetryButton.hidden=YES;self.livePauseButton.hidden=YES;
     self.liveLastFailure=nil;self.liveAttemptCount=0;
+    self.liveVariantRecoveryAttempted=NO;
     self.liveMessage.text=@"Selecione um canal para iniciar a prévia.";
 }
 - (void)openLiveFullscreen {
@@ -1658,16 +1660,22 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             self.liveRetryButton.hidden=YES;
         }
     }else if(item.status==AVPlayerItemStatusFailed){
-        [self recordLivePlayerFailure:item.error stage:@"Decodificação"];
+        [self recordLivePlayerFailure:item.error stage:@"Falha ao carregar a fonte"];
         [self tryNextPlaybackSource];
     }
 }
 - (void)recordLivePlayerFailure:(NSError *)error stage:(NSString *)stage {
     if(![self isLiveItem:self.activePlayback])return;
-    NSString *reason=stage.length?stage:@"Erro de transmissão";
-    if(error)
+    NSString *reason=stage.length?stage:@"Falha de transmissão";
+    if([error.domain isEqualToString:NSURLErrorDomain]&&
+       error.code==NSURLErrorResourceUnavailable)
+        reason=@"Recurso indisponível (-1008): URL, rede ou formato não utilizável";
+    else if(error)
         reason=[reason stringByAppendingFormat:@" (%@, código %ld)",
             error.domain?:@"iOS",(long)error.code];
+    AVPlayerItemErrorLogEvent *event=[[self.observedPlayerItem.errorLog events] lastObject];
+    if(event.errorStatusCode>=400&&event.errorStatusCode<=599)
+        reason=[reason stringByAppendingFormat:@" · HTTP %ld",(long)event.errorStatusCode];
     self.liveLastFailure=reason;
     // Never expose a stream URL: it can include signed access tokens.
     NSLog(@"[Telares Live] %@",reason);
@@ -1692,27 +1700,107 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
          }
        });
 }
+- (void)recoverLiveHLS:(NSDictionary *)source completed:(void (^)(NSArray *,NSString *))completion {
+    NSURL *url=[NSURL URLWithString:[self str:source[@"_url"]]];
+    NSString *label=[self str:source[@"_label"]].lowercaseString;
+    if(!url.host||(![url.path.lowercaseString hasSuffix:@".m3u8"]&&
+        ![label containsString:@"hls"]&&! [label containsString:@"m3u8"])){
+        completion(@[],@"A origem não ofereceu alternativas HLS.");return;
+    }
+    NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:url
+        cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:7];
+    [request setValue:@"bytes=0-32767" forHTTPHeaderField:@"Range"];
+    NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
+    config.timeoutIntervalForResource=8;
+    NSURLSession *session=[NSURLSession sessionWithConfiguration:config];
+    [[[session dataTaskWithRequest:request completionHandler:^(NSData *data,NSURLResponse *response,NSError *error){
+        NSMutableArray *variants=[NSMutableArray array];
+        NSString *reason=@"O servidor não anunciou uma variante H.264.";
+        NSHTTPURLResponse *http=[response isKindOfClass:[NSHTTPURLResponse class]]?(id)response:nil;
+        if(error)reason=@"Não foi possível ler a playlist da origem.";
+        else if(http.statusCode>=400)
+            reason=[NSString stringWithFormat:@"Servidor recusou a playlist: HTTP %ld.",(long)http.statusCode];
+        else if(data.length>0&&data.length<150000){
+            NSString *playlist=[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding];
+            if(![playlist hasPrefix:@"#EXTM3U"])
+                reason=@"A origem retornou dados que não são uma playlist HLS.";
+            else if([playlist containsString:@"METHOD=SAMPLE-AES"])
+                reason=@"Playlist exige criptografia ou proteção incompatível com o iOS 9.";
+            else{
+                NSString *meta=nil;
+                NSMutableSet *seen=[NSMutableSet setWithObject:url.absoluteString];
+                for(NSString *raw in [playlist componentsSeparatedByCharactersInSet:
+                     [NSCharacterSet newlineCharacterSet]]){
+                    NSString *line=[raw stringByTrimmingCharactersInSet:
+                        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    if([line hasPrefix:@"#EXT-X-STREAM-INF:"]){meta=line.lowercaseString;continue;}
+                    if(!meta||!line.length||[line hasPrefix:@"#"])continue;
+                    NSString *info=meta;meta=nil;
+                    if([info containsString:@"hvc1"]||[info containsString:@"hev1"]||
+                       [info containsString:@"av01"]||[info containsString:@"vp09"])continue;
+                    if([info containsString:@"codecs="]&&![info containsString:@"avc1"])continue;
+                    NSURL *variant=[[NSURL URLWithString:line relativeToURL:response.URL?:url] absoluteURL];
+                    if(!variant.host||!([variant.scheme isEqualToString:@"https"]||
+                        [variant.scheme isEqualToString:@"http"]))continue;
+                    if([url.scheme isEqualToString:@"https"]&&![variant.scheme isEqualToString:@"https"])continue;
+                    if([seen containsObject:variant.absoluteString])continue;
+                    [seen addObject:variant.absoluteString];
+                    NSMutableDictionary *next=[source mutableCopy];
+                    next[@"_url"]=variant.absoluteString;
+                    if([info containsString:@"640x"]||[info containsString:@"854x"]||
+                       [info containsString:@"1280x"]) [variants insertObject:next atIndex:0];
+                    else [variants addObject:next];
+                    if(variants.count>=8)break;
+                }
+            }
+        }
+        [session finishTasksAndInvalidate];
+        dispatch_async(dispatch_get_main_queue(),^{completion(variants,reason);});
+    }] resume];
+}
 - (void)tryNextPlaybackSource {
     if(self.closingPlayer)return;
     [self saveCurrentPosition];
     NSInteger next=self.playingSourceIndex+1;
-    if(next<(NSInteger)self.workingStreams.count && next<16){
+    if(next<(NSInteger)self.workingStreams.count&&next<16){
         self.playingSourceIndex=next;
-        self.status.text=[NSString stringWithFormat:@"Fonte instável. Tentando alternativa %ld...",
-            (long)(next+1)];
+        self.status.text=[NSString stringWithFormat:@"Tentando alternativa %ld...",(long)(next+1)];
         if([self isLiveItem:self.activePlayback])
-            self.liveMessage.text=[NSString stringWithFormat:@"Fonte %ld/%lu falhou. Tentando alternativa...",
-                (long)next,(unsigned long)self.workingStreams.count];
+            self.liveMessage.text=[NSString stringWithFormat:@"Tentando fonte %ld de %lu...",
+                (long)(next+1),(unsigned long)self.workingStreams.count];
         [self playStream:self.workingStreams[(NSUInteger)next]];
         return;
     }
     if([self isLiveItem:self.activePlayback]){
-        NSString *reason=self.liveLastFailure?:@"Formato, rede ou origem incompatível";
+        if(!self.liveVariantRecoveryAttempted&&self.workingStreams.count){
+            self.liveVariantRecoveryAttempted=YES;
+            NSUInteger generation=self.streamRequestGeneration;
+            self.liveMessage.text=@"Verificando variantes HLS...";
+            __weak ShockViewController *weakSelf=self;
+            [self recoverLiveHLS:self.workingStreams.lastObject completed:^(NSArray *variants,NSString *why){
+                ShockViewController *strong=weakSelf;
+                if(!strong||generation!=strong.streamRequestGeneration||
+                   strong.closingPlayer||![strong isLiveItem:strong.activePlayback])return;
+                if(variants.count){
+                    NSUInteger start=strong.workingStreams.count;
+                    strong.workingStreams=[strong.workingStreams arrayByAddingObjectsFromArray:variants];
+                    strong.playingSourceIndex=(NSInteger)start;
+                    [strong playStream:strong.workingStreams[start]];
+                }else{
+                    [strong closePlayerWithError:[NSString stringWithFormat:
+                        @"Canal indisponível (%lu fonte(s)). %@ %@",
+                        (unsigned long)strong.workingStreams.count,
+                        why?:@"",strong.liveLastFailure?:@""]];
+                }
+            }];
+            return;
+        }
         [self closePlayerWithError:[NSString stringWithFormat:
-            @"Fontes esgotadas (%lu). %@. iOS 9 requer HLS H.264/AAC compatível.",
-            (unsigned long)self.workingStreams.count,reason]];
-    }else
-        [self closePlayerWithError:@"As fontes verificadas falharam durante a reprodução. O AVPlayer do iOS 9 pode não suportar este formato."];
+           @"Não foi possível reproduzir as %lu fonte(s). %@. Tente outro canal ou addon.",
+           (unsigned long)self.workingStreams.count,
+           self.liveLastFailure?:@"Origem ou formato indisponível"]];
+    }else [self closePlayerWithError:
+        @"Todas as fontes falharam. O formato pode não ser suportado pelo iOS 9."];
 }
 - (void)saveCurrentPosition {
     if(!self.playbackStarted||!self.moviePlayer||!self.activePlayback)return;
