@@ -192,6 +192,9 @@ public final class MainActivity extends Activity {
     }
     /** 10-foot user interface: calm left rail, content first, consistent D-pad focus. */
     private void render() {
+        // Full browse navigation owns the inline preview; never leave audio/video
+        // decoding behind another tab, search screen, or title details.
+        if(!"aovivo".equals(activeSection))stopInlinePreview();
         showingDetails=false;
         LinearLayout shell=new LinearLayout(this);
         shell.setOrientation(BuildConfig.MOBILE_UI?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
@@ -694,10 +697,16 @@ public final class MainActivity extends Activity {
     }
     private void refreshCatalogRows(){
         if(catalogArea==null||showingDetails)return;
-        if("buscar".equals(activeSection)||"categorias".equals(activeSection))return; // Keep dedicated discovery pages.
+        if("buscar".equals(activeSection)||"categorias".equals(activeSection)){
+            stopInlinePreview();
+            return;
+        } // Keep dedicated discovery pages.
         catalogArea.removeAllViews();
         updateSpotlight();
-        if("minha".equals(activeSection))return;
+        if("minha".equals(activeSection)){
+            stopInlinePreview();
+            return;
+        }
         Set<String> shown=new HashSet<>();
         if("aovivo".equals(activeSection)){
             buildLiveChannelGuide();
@@ -805,6 +814,9 @@ public final class MainActivity extends Activity {
                         if(hints!=null&&hints.optJSONObject("proxyHeaders")!=null)continue;
                         urls.add(url);
                     }
+                    // Start promptly when the channel's own addon exposes candidates,
+                    // rather than waiting for every unrelated addon to time out.
+                    if(urls.size()>=2)break;
                 }catch(Exception ignored){}
             }
             runOnUiThread(()->{
