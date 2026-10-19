@@ -20,7 +20,7 @@ class VideoEngine:
     def __init__(self,hwnd,callback):
         self.vlc=runtime()
         options=["--quiet","--no-video-title-show","--network-caching=1200"]
-        if os.environ.get("TELARES_SELF_TEST")=="1":options.extend(["--vout=dummy","--aout=dummy"])
+        if os.environ.get("TELARES_SELF_TEST")=="1":options.extend(["--vout=vdummy","--aout=adummy"])
         self.instance=self.vlc.Instance(*options)
         self.player=self.instance.media_player_new()
         self.player.set_hwnd(hwnd)

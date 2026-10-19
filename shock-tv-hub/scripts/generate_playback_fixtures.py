@@ -13,7 +13,8 @@ def generate(directory):
     sample=root/'sample.mp4'
     subprocess.run([os.environ.get('TELARES_FFMPEG','ffmpeg'),'-hide_banner','-loglevel','error','-y','-f','lavfi','-i','testsrc=size=160x90:rate=10','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','8','-c:v','libx264','-pix_fmt','yuv420p','-g','10','-c:a','aac','-movflags','+faststart',str(sample)],check=True)
     subprocess.run([os.environ.get('TELARES_FFMPEG','ffmpeg'),'-hide_banner','-loglevel','error','-y','-i',str(sample),'-c','copy','-hls_time','1','-hls_list_size','0',str(root/'sample.m3u8')],check=True)
-    subprocess.run([os.environ.get('TELARES_FFMPEG','ffmpeg'),'-hide_banner','-loglevel','error','-y','-i',str(sample),'-c','copy','-f','dash','-seg_duration','1',str(root/'sample.mpd')],check=True)
+    subprocess.run([os.environ.get('TELARES_FFMPEG','ffmpeg'),'-hide_banner','-loglevel','error','-y','-i',sample.resolve().as_posix(),'-c','copy','-f','dash','-seg_duration','1','sample.mpd'],check=True,cwd=root)
+    assert (root/'init-stream0.m4s').is_file() and list(root.glob('chunk-stream0-*.m4s')), 'DASH segments missing beside manifest'
     body=sample.read_bytes();piece=16384
     info={'length':len(body),'name':'sample.mp4','piece length':piece,'pieces':b''.join(hashlib.sha1(body[n:n+piece]).digest() for n in range(0,len(body),piece))}
     (root/'info.bin').write_bytes(bencode(info))

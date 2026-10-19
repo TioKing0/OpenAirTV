@@ -19,7 +19,7 @@ def run(directory):
                 try:a,b,partial=byte_range(self.headers.get('Range'),len(body))
                 except ValueError:self.send_error(416);return
                 self.send_response(206 if partial else 200);self.send_header('Content-Length',str(b-a+1))
-                self.send_header('Content-Type','application/vnd.apple.mpegurl' if path.suffix=='.m3u8' else 'application/dash+xml' if path.suffix=='.mpd' else self.guess_type(str(path)))
+                self.send_header('Content-Type','application/vnd.apple.mpegurl' if path.suffix=='.m3u8' else 'application/dash+xml' if path.suffix=='.mpd' else 'video/mp4' if path.suffix in ('.mp4','.m4s') else 'video/mp2t' if path.suffix=='.ts' else 'application/octet-stream')
                 if partial:self.send_header('Content-Range',f'bytes {a}-{b}/{len(body)}')
                 self.end_headers();self.wfile.write(body[a:b+1])
     server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True
@@ -47,7 +47,7 @@ def run(directory):
                 valid=video.player.get_media().get_stats(stats)
                 if valid and stats.decoded_video>0 and video.player.get_time()>1000:decoded=True;break
                 time.sleep(.1)
-            assert decoded,'VLC did not decode '+source
+            assert decoded,'VLC did not decode '+source+' state='+str(video.player.get_state())+' time='+str(video.player.get_time())+' decoded='+str(stats.decoded_video)
             video.player.set_pause(1);time.sleep(.2);video.resume(3);seek_deadline=time.monotonic()+5
             while time.monotonic()<seek_deadline and video.position()<2:time.sleep(.1)
             assert 2.5<=video.position()<=3.5,'Seek failed: '+('torrent' if source==url else source.rsplit('/',1)[-1])
