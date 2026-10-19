@@ -1,4 +1,17 @@
 """Telares Play: Windows desktop streaming client, mouse/keyboard, Tk/VideoLAN."""
+import os,sys
+if __name__=="__main__" and len(sys.argv)>2 and sys.argv[1]=="--self-test":
+    import traceback,tempfile
+    test_log=os.environ.get('TELARES_TEST_LOG',os.path.join(tempfile.gettempdir(),'telares-playback-test.log'))
+    with open(test_log,'w',encoding='utf-8',buffering=1) as output:
+        sys.stdout=output;sys.stderr=output
+        try:
+            from self_test import run
+            result=run(sys.argv[2])
+        except BaseException:
+            traceback.print_exc();result=1
+    sys.stdout=sys.__stdout__;sys.stderr=sys.__stderr__
+    sys.exit(result)
 import concurrent.futures
 import io
 import json

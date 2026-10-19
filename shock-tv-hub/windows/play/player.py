@@ -2,6 +2,7 @@
 import os
 import pathlib
 import sys
+_dll_handles=[]
 
 def runtime():
     root=pathlib.Path(getattr(sys,"_MEIPASS",pathlib.Path(__file__).resolve().parent))
@@ -12,7 +13,9 @@ def runtime():
     if not (home/"libvlc.dll").exists():raise RuntimeError("VLC não encontrado. Extraia o ZIP completo.")
     os.environ["PATH"]=str(home)+os.pathsep+os.environ.get("PATH","")
     os.environ["VLC_PLUGIN_PATH"]=str(home/"plugins")
-    if hasattr(os,"add_dll_directory"):os.add_dll_directory(str(home))
+    os.environ['PYTHON_VLC_LIB_PATH']=str(home/'libvlc.dll')
+    os.environ['PYTHON_VLC_MODULE_PATH']=str(home/'plugins')
+    if hasattr(os,"add_dll_directory"):_dll_handles.append(os.add_dll_directory(str(home)))
     import vlc
     return vlc
 

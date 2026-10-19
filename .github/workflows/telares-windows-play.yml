@@ -106,9 +106,12 @@ jobs:
       - name: Verify packaged executable playback
         shell: pwsh
         run: |
-          $task = Start-Process -FilePath "dist/TelaresPlay/TelaresPlay.exe" -ArgumentList @("--self-test", "$((Get-Location).Path)/shock-tv-hub/test-fixtures") -PassThru -WindowStyle Hidden
-          if (!$task.WaitForExit(120000)) { $task.Kill(); throw "Packaged playback timed out" }
-          if ($task.ExitCode -ne 0) { throw "Packaged native playback failed" }
+          $env:TELARES_TEST_LOG="$((Get-Location).Path)/packaged-test.log"
+          try {
+            $task = Start-Process -FilePath "dist/TelaresPlay/TelaresPlay.exe" -ArgumentList @("--self-test", "$((Get-Location).Path)/shock-tv-hub/test-fixtures") -PassThru -WindowStyle Hidden
+            if (!$task.WaitForExit(120000)) { $task.Kill(); throw "Packaged playback timed out" }
+            if ($task.ExitCode -ne 0) { throw "Packaged native playback failed" }
+          } finally { if (Test-Path packaged-test.log) { Get-Content packaged-test.log } }
       - uses: actions/upload-artifact@v4
         with:
           name: Telares-Play-Windows-v0.2.11-RC14-${{ matrix.arch }}-Portable
