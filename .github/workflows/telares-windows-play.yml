@@ -42,6 +42,11 @@ jobs:
           $sslRoot=Split-Path '${{ steps.ssl-runtime.outputs.python-path }}'
           Copy-Item "$sslRoot/DLLs/libcrypto-1_1*.dll" shock-tv-hub/windows/play/native-runtime/
           Copy-Item "$sslRoot/DLLs/libssl-1_1*.dll" shock-tv-hub/windows/play/native-runtime/
+          if ('${{ matrix.arch }}' -eq 'x64') {
+            Copy-Item shock-tv-hub/windows/play/native-runtime/libcrypto-1_1.dll shock-tv-hub/windows/play/native-runtime/libcrypto-1_1-x64.dll
+            Copy-Item shock-tv-hub/windows/play/native-runtime/libssl-1_1.dll shock-tv-hub/windows/play/native-runtime/libssl-1_1-x64.dll
+          }
+          Copy-Item "$sslRoot/LICENSE.txt" shock-tv-hub/windows/play/native-runtime/PYTHON-OPENSSL-LICENSE.txt
           $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath
           $crt=Get-ChildItem "$vs/VC/Redist/MSVC/*/${{ matrix.arch }}/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
           if (!$crt) { throw 'Visual C++ redistributable not found' }
@@ -90,7 +95,7 @@ jobs:
       - name: Build standalone Telares Play
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name TelaresPlay --icon shock-tv-hub/windows/TelaresInstall.ico --paths shock-tv-hub/windows/play --hidden-import vlc --hidden-import libtorrent --hidden-import self_test --copy-metadata libtorrent --add-data "shock-tv-hub/windows/play/vlc;vlc" --add-binary "shock-tv-hub/windows/play/native-runtime/*.dll;native-runtime" shock-tv-hub/windows/play/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name TelaresPlay --icon shock-tv-hub/windows/TelaresInstall.ico --paths shock-tv-hub/windows/play --hidden-import vlc --hidden-import libtorrent --hidden-import self_test --copy-metadata libtorrent --add-data "shock-tv-hub/windows/play/vlc;vlc" --add-data "shock-tv-hub/windows/play/native-runtime;native-runtime" shock-tv-hub/windows/play/main.py
           if (!(Test-Path dist/TelaresPlay/TelaresPlay.exe)) { throw "Missing TelaresPlay.exe" }
           if (!(Test-Path dist/TelaresPlay/vlc/libvlc.dll)) { throw "Missing VLC runtime" }
           if (!(Test-Path dist/TelaresPlay/vlc/plugins)) { throw "Missing VLC codecs" }
