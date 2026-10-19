@@ -42,8 +42,10 @@ def run(directory):
         for source in (url,f'http://127.0.0.1:{server.server_port}/sample.m3u8',f'http://127.0.0.1:{server.server_port}/sample.mpd'):
             video.play(source);deadline=time.monotonic()+25;decoded=False
             while time.monotonic()<deadline:
-                stats=video.player.get_media().get_stats()
-                if stats and stats[0] and stats[1].decoded_video>0 and video.player.get_time()>1000:decoded=True;break
+                import vlc
+                stats=vlc.MediaStats()
+                valid=video.player.get_media().get_stats(stats)
+                if valid and stats.decoded_video>0 and video.player.get_time()>1000:decoded=True;break
                 time.sleep(.1)
             assert decoded,'VLC did not decode '+source
             video.resume(3);time.sleep(.4);assert video.position()>=2,'Seek failed'

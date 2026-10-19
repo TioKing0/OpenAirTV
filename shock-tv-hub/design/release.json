@@ -1,7 +1,7 @@
 {
   "brand": "TELARES",
   "batch": "telares-integrated-playback-rc14",
-  "revision": 4,
+  "revision": 5,
   "date": "2026-10-19",
   "feature": "OpenSubtitles and manual service setup removed; embedded BitTorrent Android/Windows; verified playback and seek tests with generated H264/AAC, HLS and DASH media",
   "streamingTargets": [

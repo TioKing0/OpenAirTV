@@ -281,7 +281,8 @@ jobs:
           target: default
           disable-animations: true
           working-directory: shock-tv-hub/android
-          script: gradle --no-daemon :app:connectedTvDebugAndroidTest
+          script: |
+            gradle --no-daemon :app:connectedTvDebugAndroidTest || { adb logcat -d -s System.err AndroidRuntime Telares; exit 1; }
       - name: Store Android playback reports
         if: always()
         uses: actions/upload-artifact@v4

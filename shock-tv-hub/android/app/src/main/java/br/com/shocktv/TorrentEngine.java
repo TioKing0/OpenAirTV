@@ -16,7 +16,7 @@ public final class TorrentEngine implements AutoCloseable {
     private TorrentHandle handle;private FileStorage files;private TorrentInfo info;
     private ServerSocket server;private File media;private long size,offset;private int pieceLength;
     private final ExecutorService requests=Executors.newFixedThreadPool(3);
-    private final Object diskLock=new Object();private volatile CountDownLatch flushed;
+    private final Object diskLock=new Object();private volatile CountDownLatch flushed;private volatile int requestedPiece=-1;private volatile boolean readOK;
     private final Set<Integer> onDisk=new HashSet<>();private final String token=UUID.randomUUID().toString();
 
     public TorrentEngine(File cache)throws IOException {this(cache,false);}
@@ -24,8 +24,8 @@ public final class TorrentEngine implements AutoCloseable {
         root=new File(cache,"telares-torrent-"+UUID.randomUUID());
         if(!root.mkdirs())throw new IOException("Não foi possível criar o cache de vídeo");
         session.addListener(new AlertListener(){
-            public int[] types(){return new int[]{AlertType.CACHE_FLUSHED.swig()};}
-            public void alert(Alert<?> alert){CountDownLatch latch=flushed;if(latch!=null)latch.countDown();}
+            public int[] types(){return new int[]{AlertType.READ_PIECE.swig()};}
+            public void alert(Alert<?> alert){ReadPieceAlert read=(ReadPieceAlert)alert;CountDownLatch latch=flushed;if(latch!=null&&read.piece()==requestedPiece){readOK=read.error().value()==0;latch.countDown();}}
         });
         SettingsPack settings=new SettingsPack();settings.setEnableDht(true);settings.setEnableLsd(true);settings.connectionsLimit(60);settings.listenInterfaces("0.0.0.0:0");
         if(localFixture)settings.setBoolean(org.libtorrent4j.swig.settings_pack.bool_types.ssrf_mitigation.swigValue(),false);
@@ -101,8 +101,8 @@ public final class TorrentEngine implements AutoCloseable {
         if(closed)throw new InterruptedException("Cancelado");
         // Wait for disk writes before reading; sparse unwritten bytes must never reach the decoder.
         if(!onDisk.contains(piece)){
-            CountDownLatch latch=new CountDownLatch(1);flushed=latch;handle.flushCache();
-            if(!latch.await(10,TimeUnit.SECONDS))throw new IOException("Cache torrent não foi confirmado em disco");
+            CountDownLatch latch=new CountDownLatch(1);flushed=latch;requestedPiece=piece;readOK=false;handle.readPiece(piece);
+            if(!latch.await(10,TimeUnit.SECONDS)||!readOK)throw new IOException("Cache torrent não foi confirmado em disco");
             onDisk.add(piece);if(onDisk.size()>256)onDisk.clear();flushed=null;
         }
     }

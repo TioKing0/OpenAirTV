@@ -71,7 +71,7 @@ tasks.withType(Test).configureEach {
   doFirst {
     def nativeJar = configurations.tvDebugUnitTestRuntimeClasspath.files.find { it.name.startsWith('libtorrent4j-linux-') }
     if (nativeJar != null) {
-      copy { from zipTree(nativeJar); include '**/libtorrent4j.so'; into "${buildDir}/test-native"; eachFile { path = name }; includeEmptyDirs = false }
+      copy { from zipTree(nativeJar); include 'lib/x86_64/libtorrent4j.so'; into "${buildDir}/test-native"; eachFile { path = name }; includeEmptyDirs = false }
     }
   }
 }
