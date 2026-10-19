@@ -2004,7 +2004,7 @@ public final class MainActivity extends Activity {
                             .setItems(torrentLabels.toArray(new String[0]),(dialog,index)->{
                                 try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(torrentLinks.get(index))));}
                                 catch(Exception e){message("Nenhum aplicativo BitTorrent compatível está instalado. Configure um servidor Stremio em Fontes > Reprodução e legendas.");}
-                            }).setMessage("Selecione uma fonte para abrir no aplicativo BitTorrent instalado. Media3 não decodifica magnet links.")
+                            })
                             .setNegativeButton("Voltar",null).show();return;
                     }
                     message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent exigem um motor compatível."

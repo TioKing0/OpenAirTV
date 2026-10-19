@@ -1,6 +1,7 @@
 {
   "brand": "TELARES",
   "batch": "telares-smart-playback-rc13",
+  "revision": 2,
   "date": "2026-10-18",
   "feature": "Smart Playback Media3, decoder fallback, HLS/DASH probes, BitTorrent HTTP bridge/external engine, configurable OpenSubtitles Pro, PT-BR subtitles and sync, mixed-catalog classification fixes",
   "streamingTargets": [

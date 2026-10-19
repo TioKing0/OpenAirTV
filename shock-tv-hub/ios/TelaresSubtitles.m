@@ -13,6 +13,7 @@
 @property(nonatomic,assign) double delay;
 @property(nonatomic,assign) BOOL closed;
 @property(nonatomic,copy) NSString *status;
+- (void)selectSubtitleAtIndex:(NSUInteger)index;
 @end
 @implementation TelaresSubtitles
 - (NSString *)string:(id)v{return [v isKindOfClass:[NSString class]]?v:@"";}
@@ -60,7 +61,7 @@
 }
 - (void)load:(NSArray *)sources index:(NSUInteger)index type:(NSString *)type identifier:(NSString *)identifier {
     if(self.closed||index>=sources.count){
-        if(self.tracks.count&&[self rank:[self string:self.tracks[0][@"lang"]]]==0)[self select:0];return;
+        if(self.tracks.count&&[self rank:[self string:self.tracks[0][@"lang"]]]==0)[self selectSubtitleAtIndex:0];return;
     }
     NSString *addon=[self string:sources[index]];
     [self json:addon done:^(NSDictionary *manifest){
@@ -101,7 +102,7 @@
     for(NSUInteger i=1;i<=4;i++){NSRange r=[match rangeAtIndex:i];if(r.location!=NSNotFound)parts[i-1]=[[value substringWithRange:r]doubleValue];}
     return parts[0]*3600+parts[1]*60+parts[2]+parts[3]/1000;
 }
-- (void)select:(NSUInteger)index {
+- (void)selectSubtitleAtIndex:(NSUInteger)index {
     NSInteger token=++self.generation;self.cues=@[];self.caption.text=@"";
     AVMediaSelectionGroup *internal=[self.player.currentItem.asset mediaSelectionGroupForMediaCharacteristic:AVMediaCharacteristicLegible];
     if(internal)[self.player.currentItem selectMediaOption:nil inMediaSelectionGroup:internal];
@@ -114,14 +115,16 @@
             text=[text stringByReplacingOccurrencesOfString:@"\r" withString:@""];
             for(NSString *block in [text componentsSeparatedByString:@"\n\n"]){
                 NSArray *lines=[block componentsSeparatedByString:@"\n"];
-                for(NSUInteger n=0;n<lines.count;n++)if([lines[n]containsString:@"-->"]){
+                for(NSUInteger n=0;n<lines.count;n++){
+                    if(![lines[n]containsString:@"-->"])continue;
                     NSArray *pair=[lines[n]componentsSeparatedByString:@"-->"];
                     double start=[self time:pair[0]],end=[self time:pair[1]];
                     if(start<0||end<=start)break;
                     NSString *caption=[[lines subarrayWithRange:NSMakeRange(n+1,lines.count-n-1)]componentsJoinedByString:@"\n"];
                     caption=[caption stringByReplacingOccurrencesOfString:@"<[^>]+>" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0,caption.length)];
                     [cues addObject:@{ @"start":@(start),@"end":@(end),@"text":caption }];break;
-                }if(cues.count>=30000)break;
+                }
+                if(cues.count>=30000)break;
             }
         }
         dispatch_async(dispatch_get_main_queue(),^{if(!self.closed&&token==self.generation){self.cues=cues;
@@ -143,7 +146,7 @@
     for(NSUInteger i=0;i<self.tracks.count;i++){
         NSDictionary *track=self.tracks[i];NSUInteger selected=i;
         NSString *label=[NSString stringWithFormat:@"%@ · %@",[self string:track[@"lang"]],[self string:track[@"label"]?:track[@"id"]]];
-        [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){[self select:selected];}]];
+        [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){[self selectSubtitleAtIndex:selected];}]];
     }
     [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Antecipar 0,5s (%.1fs)",self.delay]style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){self.delay=MAX(-60,self.delay-.5);}]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Atrasar 0,5s" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){self.delay=MIN(60,self.delay+.5);}]];

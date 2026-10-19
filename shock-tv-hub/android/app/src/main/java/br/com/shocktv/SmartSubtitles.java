@@ -36,7 +36,10 @@ public final class SmartSubtitles {
         p.bottomMargin=(int)(85*a.getResources().getDisplayMetrics().density);root.addView(overlay,p);
         ui.post(tick);
     }
-    public void bind(ExoPlayer value){player=value;}
+    public void bind(ExoPlayer value){
+        player=value;
+        if(timeline!=null)player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT,true).build());
+    }
     private final Runnable tick=new Runnable(){public void run(){
         if(closed)return;overlay.setText(timeline!=null&&player!=null?timeline.at(player.getCurrentPosition(),delay):"");
         ui.postDelayed(this,200);
