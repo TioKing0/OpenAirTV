@@ -19,7 +19,8 @@ public final class TorrentEngine implements AutoCloseable {
     private final Object diskLock=new Object();private volatile CountDownLatch flushed;
     private final Set<Integer> onDisk=new HashSet<>();private final String token=UUID.randomUUID().toString();
 
-    public TorrentEngine(File cache)throws IOException {
+    public TorrentEngine(File cache)throws IOException {this(cache,false);}
+    TorrentEngine(File cache,boolean localFixture)throws IOException {
         root=new File(cache,"telares-torrent-"+UUID.randomUUID());
         if(!root.mkdirs())throw new IOException("Não foi possível criar o cache de vídeo");
         session.addListener(new AlertListener(){
@@ -27,6 +28,7 @@ public final class TorrentEngine implements AutoCloseable {
             public void alert(Alert<?> alert){CountDownLatch latch=flushed;if(latch!=null)latch.countDown();}
         });
         SettingsPack settings=new SettingsPack();settings.setEnableDht(true);settings.setEnableLsd(true);settings.connectionsLimit(60);settings.listenInterfaces("0.0.0.0:0");
+        if(localFixture)settings.setBoolean(org.libtorrent4j.swig.settings_pack.bool_types.ssrf_mitigation.swigValue(),false);
         session.start(new SessionParams(settings));session.uploadRateLimit(128*1024);
     }
     private static boolean mediaPath(String name){return name.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|m4v|mkv|webm|mov|avi|ts|m2ts|mp3|aac|flac|ogg)$");}
@@ -126,7 +128,7 @@ public final class TorrentEngine implements AutoCloseable {
                 synchronized(diskLock){ready(piece);try(RandomAccessFile file=new RandomAccessFile(media,"r")){file.seek(position);file.readFully(buffer,0,count);}}
                 out.write(buffer,0,count);position+=count;
             }
-        }catch(Exception ignored){} // A stalled source closes the stream and Media3 tries the next candidate.
+        }catch(Exception error){System.err.println("Torrent transport: "+error.getClass().getSimpleName()+": "+error.getMessage());} // A stalled source closes the stream and Media3 tries the next candidate.
     }
     @Override public void close(){
         if(closed)return;closed=true;CountDownLatch latch=flushed;if(latch!=null)latch.countDown();

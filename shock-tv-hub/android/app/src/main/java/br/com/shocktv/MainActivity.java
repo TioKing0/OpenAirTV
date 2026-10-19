@@ -162,7 +162,9 @@ public final class MainActivity extends Activity {
                     sources.add(url);
             }
         }catch(Exception ignored){}
-        sources.removeIf(SmartPlayback::removedAddon);
+        for(int i=sources.size()-1;i>=0;i--)if(SmartPlayback.removedAddon(sources.get(i)))sources.remove(i);
+        Set<String> removed=new HashSet<>();for(String addon:disabledBundled)if(SmartPlayback.removedAddon(addon))removed.add(addon);
+        disabledBundled.removeAll(removed);
         getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).edit().remove("torrentServer").apply();
         saveSources();
     }

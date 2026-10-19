@@ -38,7 +38,7 @@ def select_file(files,index=None):
     return choices[0]
 
 class TorrentEngine:
-    def __init__(self,cache_parent=None):
+    def __init__(self,cache_parent=None,*,local_fixture=False):
         import libtorrent as lt
         self.lt=lt
         self.root=pathlib.Path(tempfile.mkdtemp(prefix='telares-torrent-',dir=cache_parent))
@@ -46,7 +46,7 @@ class TorrentEngine:
         self.condition=threading.Condition();self.pieces=collections.OrderedDict();self.pending=set()
         self.session=lt.session({'enable_dht':True,'enable_lsd':True,'enable_upnp':False,'enable_natpmp':False,
             'listen_interfaces':'0.0.0.0:0','connections_limit':60,'upload_rate_limit':128*1024,
-            'alert_mask':int(lt.alert.category_t.all_categories)})
+            'ssrf_mitigation':not local_fixture,'alert_mask':int(lt.alert.category_t.all_categories)})
         self.alert_thread=threading.Thread(target=self._alerts,daemon=True);self.alert_thread.start()
 
     def _alerts(self):

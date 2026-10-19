@@ -370,7 +370,7 @@ public final class PlayerActivity extends Activity {
             torrentWorker.execute(()->{
                 TorrentEngine engine=null;
                 try{
-                    engine=new TorrentEngine(getCacheDir());final TorrentEngine active=engine;
+                    engine=new TorrentEngine(getCacheDir(),BuildConfig.DEBUG && getIntent().getBooleanExtra("localFixture",false));final TorrentEngine active=engine;
                     handler.post(()->{if(!closing&&generation==torrentGeneration)torrentEngine=active;else active.close();});
                     String local=engine.open(chosen.url);
                     handler.post(()->{if(!closing&&generation==torrentGeneration)playResolved(index,position,initiated,local);else active.close();});

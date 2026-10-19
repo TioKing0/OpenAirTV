@@ -24,7 +24,7 @@ def run(directory):
                 self.end_headers();self.wfile.write(body[a:b+1])
     server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True
     threading.Thread(target=server.serve_forever,daemon=True).start()
-    engine=TorrentEngine();video=None
+    engine=TorrentEngine(local_fixture=True);video=None
     try:
         url=engine.open(f'http://127.0.0.1:{server.server_port}/sample.torrent',timeout=20)
         original=(root/'sample.mp4').read_bytes()

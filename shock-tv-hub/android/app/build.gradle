@@ -69,7 +69,7 @@ tasks.withType(Test).configureEach {
   systemProperty 'telares.fixture', rootProject.file('../test-fixtures').absolutePath
   systemProperty 'java.library.path', "${buildDir}/test-native"
   doFirst {
-    def nativeJar = configurations.testTvDebugRuntimeClasspath.files.find { it.name.startsWith('libtorrent4j-linux-') }
+    def nativeJar = configurations.tvDebugUnitTestRuntimeClasspath.files.find { it.name.startsWith('libtorrent4j-linux-') }
     if (nativeJar != null) {
       copy { from zipTree(nativeJar); include '**/libtorrent4j.so'; into "${buildDir}/test-native"; eachFile { path = name }; includeEmptyDirs = false }
     }

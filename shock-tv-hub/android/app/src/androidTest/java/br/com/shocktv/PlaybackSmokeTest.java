@@ -42,7 +42,7 @@ public class PlaybackSmokeTest {
   try(Origin origin=new Origin()){
    for(String path:new String[]{"sample.mp4","sample.m3u8","sample.mpd","sample.torrent"}){
     Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();Intent intent=new Intent(target,PlayerActivity.class);
-    intent.putExtra("url",origin.url(path));intent.putExtra("libraryKey","test|"+path);intent.putExtra("type","direct");intent.putExtra("title","Synthetic playback test");
+    intent.putExtra("localFixture",true);intent.putExtra("url",origin.url(path));intent.putExtra("libraryKey","test|"+path);intent.putExtra("type","direct");intent.putExtra("title","Synthetic playback test");
     try(ActivityScenario<PlayerActivity> scenario=ActivityScenario.launch(intent)){
      AtomicBoolean decoded=new AtomicBoolean();long deadline=System.currentTimeMillis()+60000;
      while(System.currentTimeMillis()<deadline&&!decoded.get()){
