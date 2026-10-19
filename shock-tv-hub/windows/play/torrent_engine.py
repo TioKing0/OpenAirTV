@@ -3,6 +3,7 @@
 No separate daemon, browser, account, public web server or user configuration.
 Only one active torrent. Cache and session are destroyed when playback closes.
 """
+import os,sys
 import collections
 import http.server
 import pathlib
@@ -15,6 +16,11 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+
+_dll_handles=[]
+if os.name=='nt':
+    _native=pathlib.Path(getattr(sys,'_MEIPASS',pathlib.Path(__file__).resolve().parent))/'native-runtime'
+    if _native.is_dir():_dll_handles.append(os.add_dll_directory(str(_native)))
 
 MEDIA={'.mp4','.m4v','.mkv','.webm','.mov','.avi','.ts','.m2ts','.mp3','.aac','.flac','.ogg'}
 
