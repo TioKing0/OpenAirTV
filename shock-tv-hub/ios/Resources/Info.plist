@@ -6,8 +6,8 @@
  <key>CFBundleDisplayName</key><string>Telares Play</string>
  <key>CFBundleName</key><string>TelaresPlay</string>
  <key>CFBundlePackageType</key><string>APPL</string>
- <key>CFBundleVersion</key><string>14</string>
- <key>CFBundleShortVersionString</key><string>0.3.10</string>
+ <key>CFBundleVersion</key><string>15</string>
+ <key>CFBundleShortVersionString</key><string>0.3.11</string>
  <key>CFBundleDevelopmentRegion</key><string>pt_BR</string>
  <key>LSRequiresIPhoneOS</key><true/>
  <key>MinimumOSVersion</key><string>9.0</string>
@@ -22,3 +22,4 @@
  <key>CFBundleIconFiles</key><array><string>AppIcon29x29</string><string>AppIcon40x40</string><string>AppIcon76x76</string></array>
  <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict></plist>
+

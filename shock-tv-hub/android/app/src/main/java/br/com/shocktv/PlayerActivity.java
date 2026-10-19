@@ -44,6 +44,7 @@ import java.util.Set;
 public final class PlayerActivity extends Activity {
     private static final String TAG="Telares-Player";
     private ExoPlayer player;
+    private SmartSubtitles smartSubtitles;
     private PlayerView playerView;
     private UserLibrary library;
     private String currentKey;
@@ -122,9 +123,12 @@ public final class PlayerActivity extends Activity {
         playerView.setKeepScreenOn(true);
         playerView.setShowSubtitleButton(true);
         layout.addView(playerView,new FrameLayout.LayoutParams(-1,-1));
+        smartSubtitles=new SmartSubtitles(this,layout);
         if(!queue)installQuickControls(layout);
         setContentView(layout);
         playOption(selectedIndex,lastKnownPosition,false);
+        if(!queue&&!isLive)smartSubtitles.load(getIntent().getStringArrayExtra("subtitleAddons"),
+            getIntent().getStringExtra("type"),getIntent().getStringExtra("videoId"));
         handler.postDelayed(periodic,10000L);
         playerView.requestFocus();
         playerView.hideController();
@@ -222,6 +226,8 @@ public final class PlayerActivity extends Activity {
         languageButton=control("Idioma");
         sourceButton=control("Fontes");
         top.addView(qualityButton);top.addView(languageButton);top.addView(sourceButton);
+        Button subtitles=control("Legendas");top.addView(subtitles);
+        subtitles.setOnClickListener(v->smartSubtitles.show());
         FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(-2,dp(52),Gravity.TOP|Gravity.RIGHT);
         params.topMargin=dp(6);params.rightMargin=dp(16);
         root.addView(top,params);
@@ -383,7 +389,12 @@ public final class PlayerActivity extends Activity {
         boolean sensitive=headers.containsKey("Authorization")||headers.containsKey("Cookie");
         http.setAllowCrossProtocolRedirects(!sensitive);
         DefaultDataSource.Factory data=new DefaultDataSource.Factory(this,http);
-        player=new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
+        player=new ExoPlayer.Builder(this)
+            .setRenderersFactory(new androidx.media3.exoplayer.DefaultRenderersFactory(this).setEnableDecoderFallback(true))
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+            .setPreferredTextLanguages("pt-BR","pt","por").build());
+        smartSubtitles.bind(player);
         playerView.setPlayer(player);
         player.addListener(new Player.Listener(){
             @Override public void onPlaybackStateChanged(int state){
@@ -438,7 +449,7 @@ public final class PlayerActivity extends Activity {
         MediaItem.Builder builder=new MediaItem.Builder().setUri(url).setMediaId(key)
             .setMediaMetadata(new MediaMetadata.Builder().setTitle(name).build());
         String ext=url.toLowerCase(Locale.ROOT).split("[?#]",2)[0];
-        if("application/x-mpegURL".equals(mime)||ext.endsWith(".m3u8"))
+        if((mime!=null&&mime.toLowerCase(Locale.ROOT).contains("mpegurl"))||ext.endsWith(".m3u8"))
             builder.setMimeType(MimeTypes.APPLICATION_M3U8);
         else if("application/dash+xml".equals(mime)||ext.endsWith(".mpd"))
             builder.setMimeType(MimeTypes.APPLICATION_MPD);
@@ -508,6 +519,14 @@ public final class PlayerActivity extends Activity {
               long pos=status==416?0:Math.max(0,lastKnownPosition);
               playOption(selectedIndex,pos,true);
           })
+          .setNeutralButton("Player externo",(d,w)->{
+              try{android.content.Intent intent=new android.content.Intent(android.content.Intent.ACTION_VIEW);
+                  String mime=verified.get(selectedIndex).mime;
+                  intent.setDataAndType(android.net.Uri.parse(verified.get(selectedIndex).url),mime.isEmpty()?"video/*":mime);
+                  intent.putExtra("position",(int)Math.max(0,lastKnownPosition));
+                  startActivity(intent);showingError=false;
+              }catch(Exception e){showingError=false;Toast.makeText(this,"Nenhum player externo compatível instalado",Toast.LENGTH_LONG).show();}
+          })
           .setNegativeButton("Voltar ao título",(d,w)->{closing=true;finish();})
           .setOnCancelListener(d->{closing=true;finish();})
           .show();
@@ -529,6 +548,7 @@ public final class PlayerActivity extends Activity {
     @Override protected void onStop(){save(false);super.onStop();}
     @Override protected void onDestroy(){
         closing=true;
+        if(smartSubtitles!=null)smartSubtitles.close();
         handler.removeCallbacks(periodic);
         handler.removeCallbacks(hideControls);
         save(false);
@@ -536,3 +556,4 @@ public final class PlayerActivity extends Activity {
         super.onDestroy();
     }
 }
+

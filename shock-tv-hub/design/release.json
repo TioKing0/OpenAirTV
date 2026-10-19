@@ -1,36 +1,36 @@
 {
   "brand": "TELARES",
-  "batch": "telares-hls-playback-diagnostics-rc12",
-  "date": "2026-10-17",
-  "feature": "Melhor diagnóstico NSURLErrorDomain -1008 de canais ao vivo no iPad; recuperação da playlist HLS via GET sem Range; distinguir 401/403/404/5xx; expor somente host do servidor; demais interfaces e filtros preservados",
+  "batch": "telares-smart-playback-rc13",
+  "date": "2026-10-18",
+  "feature": "Smart Playback Media3, decoder fallback, HLS/DASH probes, BitTorrent HTTP bridge/external engine, configurable OpenSubtitles Pro, PT-BR subtitles and sync, mixed-catalog classification fixes",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc12",
+      "version": "1.0.0-rc13",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.10",
+      "version": "0.3.11",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.9"
+      "version": "0.2.10"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.9"
+      "version": "0.2.10"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc5",
+      "version": "0.1.0-rc13",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -121,7 +121,8 @@
     "https://catalogo-iptv-production.up.railway.app/manifest.json",
     "https://plaviohd.edon.workers.dev/manifest.json",
     "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
-    "https://h-gate.site/dc/manifest.json"
+    "https://h-gate.site/dc/manifest.json",
+    "https://opensubtitlesv3-pro.dexter21767.com/manifest.json"
   ],
   "liveTv": {
     "protocolTypes": [
@@ -173,5 +174,10 @@
     ],
     "streamAvailability": "Dependent on actual addon, network, codecs, DRM and rights",
     "androidTvInlinePreview": "muted Media3 preview with fallback; user can open fullscreen"
+  },
+  "smartPlayback": {
+    "torrentEngine": "User-configured Stremio-compatible HTTP server; fileIdx required, otherwise external magnet client on Android/Windows. No embedded torrent engine.",
+    "subtitles": "OpenSubtitles Pro configurationRequired: configure account locally and add resulting manifest. PT-BR preferred; SRT/WebVTT delay on Android/iOS and VLC subtitle delay on Windows.",
+    "validation": "CI required; physical devices and provider availability not certified"
   }
 }

@@ -1,5 +1,9 @@
 # Telares: política de lançamento multiplataforma
 
+## RC13 (2026-10-18)
+
+O escopo atual está em `RC13.md`. Os dez artefatos são recompilados do mesmo commit; os três workflows devem passar antes da publicação automática da pré-versão. Smart Playback Android mantém Media3 e adiciona fallback de decoder/player e fontes. Fontes BitTorrent usam ponte HTTP para motor Stremio configurado pelo usuário ou cliente externo compatível, sem fingir que Media3/AVPlayer/VLC decodificam magnets. OpenSubtitles Pro exige configuração do serviço; nenhuma chave é incluída no repositório. Mantidos os gêneros e os dados locais da RC12. A matriz antiga abaixo é histórica: o Android mobile e o Windows Play já existem nesta RC. Testes físicos seguem necessários.
+
 Toda atualização de **experiência de streaming** deve atualizar simultaneamente a configuração e as interfaces correspondentes de **Telares TV Android**, **Telares Play iOS 9** e **Telares Play Windows x86/x64**. Os produtos Telares Install devem ser recompilados no mesmo lote e entregues com versão atual, mesmo quando o recurso não se aplica à instalação de TVs. Toda build do lote precisa passar e os links devem apontar para artefatos conferidos.
 
 Os apps móveis Android/iOS de telefone **ainda não existem** e não podem ser tratados como entregues. Um release não pode fingir compatibilidade em TVs antigas de outras famílias com apenas um widget Orsay.
@@ -68,3 +72,4 @@ O erro NSURLErrorDomain -1008 é NSURLErrorResourceUnavailable, não exclusivame
 ## RC12: diagnóstico de transmissão ao vivo no iPad
 
 A falha `NSURLErrorDomain -1008` indica recurso não disponível para o AVPlayer. Sozinha **não prova codec incompatível**. O cliente mostra mensagens separadas para HTTP 401/403 (necessidade de autorização), 404/410 (recurso inexistente), 5xx (falha da origem) e outros erros. Apenas o domínio do servidor é exibido, sem revelar tokens da URL. Na tentativa de identificar variantes HLS, o iPad consulta a playlist com GET normal, sem cabeçalho `Range`, que pode provocar HTTP 416 ou respostas inválidas em alguns provedores. A tentativa só procura alternativas anunciadas pela origem; não remove DRM ou cria sinais inexistentes. Canais com apenas uma fonte ausente continuarão indisponíveis. Preservadas três colunas, categorias, filmes, séries, gêneros e seleção automática VOD. Os utilitários Telares Install acompanham o lote mas não possuem reprodução.
+

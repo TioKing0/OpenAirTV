@@ -65,14 +65,14 @@ public final class MainActivity extends Activity {
     private static final String DC_UNIVERSE="https://h-gate.site/dc/manifest.json";
     private static final String[] BUNDLED_ADDONS={
         CINEMETA,FENIXFLIX,TORRENTIO,NETFLIX_CATALOG,PIRATEBAY_PLUS,
-        IPTV,PLAVIO,TVVIO,DC_UNIVERSE
+        IPTV,PLAVIO,TVVIO,DC_UNIVERSE,SmartPlayback.SUBTITLE_ADDON
     };
     private static final String[] BUNDLED_NAMES={
         "Cinemeta • Metadados","FenixFlix • Addon comunitário",
         "Torrentio • Busca de streams","Netflix Catalog • Metadados",
         "ThePirateBay+ • Busca de streams",
         "Catálogo IPTV • canais ao vivo","PlavioHD • Addon comunitário",
-        "Tvvio • canais ao vivo","DC Universe • Catálogo temático"
+        "Tvvio • canais ao vivo","DC Universe • Catálogo temático","OpenSubtitles v3 Pro • Legendas"
     };
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ExecutorService searchExecutor=Executors.newSingleThreadExecutor();
@@ -557,9 +557,24 @@ public final class MainActivity extends Activity {
               }
           })
           .setPositiveButton("Adicionar fonte",(d,w)->addSourceDialog())
-          .setNeutralButton("Sobre", (d,w)->message("Os addons predefinidos podem ser ativados ou desativados. "+
-              "Algumas fontes oferecem só metadados, outras oferecem torrents. O Media3 não reproduz torrents diretamente."))
+          .setNeutralButton("Reprodução e legendas", (d,w)->smartPlaybackSettings())
           .setNegativeButton("Fechar",null).show();
+    }
+    private void smartPlaybackSettings(){
+        new AlertDialog.Builder(this).setTitle("Smart Playback RC13")
+            .setItems(new String[]{"Servidor BitTorrent compatível com Stremio", "Configurar OpenSubtitles Pro"},(d,n)->{
+                if(n==1){try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://opensubtitlesv3-pro.dexter21767.com/configure")));}
+                    catch(Exception e){message("Abra opensubtitlesv3-pro.dexter21767.com/configure no navegador e adicione o manifesto configurado em Fontes.");}return;}
+                EditText field=new EditText(this);field.setSingleLine(true);
+                field.setHint("http://192.168.1.10:11470");
+                field.setText(getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("torrentServer",""));
+                new AlertDialog.Builder(this).setTitle("Motor BitTorrent HTTP")
+                    .setMessage("Use um servidor Stremio na sua rede. Sem servidor ou índice de arquivo, a fonte será aberta em um aplicativo BitTorrent compatível. Deixe vazio para desativar a ponte.")
+                    .setView(field).setPositiveButton("Salvar",(a,b)->{String value=field.getText().toString().trim();
+                        if(!value.isEmpty()&&!SmartPlayback.http(value)){message("Informe HTTP(S) sem usuário/senha na URL.");return;}
+                        getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).edit().putString("torrentServer",value).apply();})
+                    .setNegativeButton("Cancelar",null).show();
+            }).setNegativeButton("Fechar",null).show();
     }
     private JSONObject getManifest(String url) throws Exception{
         synchronized(manifestCache){
@@ -576,8 +591,8 @@ public final class MainActivity extends Activity {
         if("tv".equals(type)||"channel".equals(type))return true;
         String origin=normalizeCategory(manifest.optString("id","")+" "+
             manifest.optString("name","")+" "+source);
-        if(origin.contains("catalogo iptv")||origin.contains("tvvio")||
-            origin.contains("iptv"))return true;
+        if((origin.contains("catalogo iptv")||origin.contains("tvvio"))&&
+            !"movie".equals(type))return true;
         String label=normalizeCategory(catalog.optString("name","")+" "+catalog.optString("id",""));
         if(label.contains("canais ao vivo")||label.contains("live channels")||
             label.contains("tv channels"))return true;
@@ -671,6 +686,7 @@ public final class MainActivity extends Activity {
         if("tv".equals(m.displayType)||"tv".equals(m.type)||"channel".equals(m.type))return true;
         // Historical metadata can say series even though it came from a TV catalogue.
         // Route legacy entries to the channel guide without deleting the user's library.
+        if("movie".equals(m.displayType)||"movie".equals(m.type))return false;
         String source=normalizeCategory(m.source+" "+m.origin);
         return source.contains("catalogo iptv production")||
                source.contains("tvvio.baby beamup");
@@ -1885,6 +1901,8 @@ public final class MainActivity extends Activity {
             ArrayList<StreamProbe.Option> candidates=new ArrayList<>();
             Set<String> seen=new HashSet<>();
             int torrents=0,external=0,bad=0,failed=0;
+            ArrayList<String> torrentLinks=new ArrayList<>(),torrentLabels=new ArrayList<>();
+            String torrentServer=getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("torrentServer","");
             for(String manifestUrl:new ArrayList<>(sources)){
                 try{
                     JSONObject manifest=getManifest(manifestUrl);
@@ -1896,6 +1914,13 @@ public final class MainActivity extends Activity {
                     for(int i=0;i<streams.length()&&i<60;i++){
                         JSONObject stream=streams.optJSONObject(i);if(stream==null)continue;
                         String url=stream.optString("url","");
+                        String magnet=SmartPlayback.magnet(stream);
+                        if(!magnet.isEmpty()){
+                            torrents++;
+                            if(torrentLinks.size()<24){torrentLinks.add(magnet);torrentLabels.add(stream.optString("name","BitTorrent")+" · "+stream.optString("title",""));}
+                            String resolved=SmartPlayback.torrentUrl(stream,torrentServer);
+                            url=resolved; // Unresolved torrent URLs must not enter the HTTP decoder.
+                        }
                         if(!isHttpMediaCandidate(url)){
                             if(!stream.optString("infoHash","").isEmpty())torrents++;
                             else if(!stream.optString("externalUrl","").isEmpty()||
@@ -1974,7 +1999,15 @@ public final class MainActivity extends Activity {
                     String detail=candidateCount>0
                         ?"Nenhuma das "+Math.min(candidateCount,24)+" URLs verificadas respondeu como mídia HTTP válida."
                         :"Nenhuma URL direta foi fornecida pelos addons ativos.";
-                    message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent não são compatíveis com este player."
+                    if(!torrentLinks.isEmpty()){
+                        new AlertDialog.Builder(this).setTitle("Fontes BitTorrent · motor externo")
+                            .setItems(torrentLabels.toArray(new String[0]),(dialog,index)->{
+                                try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(torrentLinks.get(index))));}
+                                catch(Exception e){message("Nenhum aplicativo BitTorrent compatível está instalado. Configure um servidor Stremio em Fontes > Reprodução e legendas.");}
+                            }).setMessage("Selecione uma fonte para abrir no aplicativo BitTorrent instalado. Media3 não decodifica magnet links.")
+                            .setNegativeButton("Voltar",null).show();return;
+                    }
+                    message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent exigem um motor compatível."
                         +"\nLinks externos: "+skippedExternal+" • Outras entradas: "+skippedBad+
                         " • Addons que falharam: "+failedAddons+
                         "\n\nTente outra fonte ou outro título.");
@@ -2058,6 +2091,8 @@ public final class MainActivity extends Activity {
         Intent intent=new Intent(this,PlayerActivity.class);
         intent.putExtra("url",url);intent.putExtra("title",m.name);
         intent.putExtra("id",m.id);intent.putExtra("type",m.type);
+        intent.putExtra("videoId",videoId.isEmpty()?m.id:videoId);
+        intent.putExtra("subtitleAddons",sources.toArray(new String[0]));
         intent.putExtra("isLive",isChannel(m));
         intent.putExtra("poster",m.poster);intent.putExtra("description",m.description);
         intent.putExtra("source",m.source);intent.putExtra("episodeId",m.episodeId);
@@ -2121,3 +2156,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+

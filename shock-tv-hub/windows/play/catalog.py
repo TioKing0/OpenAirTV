@@ -15,6 +15,7 @@ DEFAULT = [
  "https://plaviohd.edon.workers.dev/manifest.json",
  "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
  "https://h-gate.site/dc/manifest.json",
+ "https://opensubtitlesv3-pro.dexter21767.com/manifest.json",
 ]
 def get_json(url):
     req=request.Request(url,headers={"User-Agent":"TelaresPlay/0.1","Accept":"application/json"})
@@ -40,12 +41,13 @@ def manifest(url):
 
 def supports(m,resource,typ,identifier):
     for x in m.get("resources",[]):
-        if x==resource: return True
-        if isinstance(x,dict) and x.get("name")==resource:
-            if x.get("types") and typ not in x["types"]: continue
-            prefix=x.get("idPrefixes") or m.get("idPrefixes") or []
-            if prefix and not any(identifier.startswith(p) for p in prefix if isinstance(p,str)): continue
-            return True
+        if x!=resource and not (isinstance(x,dict) and x.get("name")==resource):continue
+        qualified=x if isinstance(x,dict) else {}
+        types=qualified.get("types",m.get("types",[]))
+        prefixes=qualified.get("idPrefixes",m.get("idPrefixes",[]))
+        if types and typ not in types:continue
+        if prefixes and not any(identifier.startswith(p) for p in prefixes if isinstance(p,str)):continue
+        return True
     return False
 
 def key(item):
@@ -100,7 +102,7 @@ def live_catalog(manifest_doc,cat,manifest_url=""):
     if cat.get("type") in ("tv","channel"):return True
     origin=normalized(" ".join(str(x) for x in
         (manifest_doc.get("id",""),manifest_doc.get("name",""),manifest_url)))
-    if any(term in origin for term in ("catalogo iptv","tvvio","iptv")):return True
+    if any(term in origin for term in ("catalogo iptv","tvvio")) and cat.get("type")!="movie":return True
     label=normalized(str(cat.get("name",""))+" "+str(cat.get("id","")))
     if any(term in label for term in ("canais ao vivo","live channels","tv channels")):return True
     desc=normalized(manifest_doc.get("description",""))
@@ -188,7 +190,46 @@ def score(x):
     q=40 if "1080" in text else 30 if "720" in text else 20 if "2160" in text or "4k" in text else 0
     return q+(30 if any(t in text for t in ("dublado","pt-br","portugu")) else 0)
 
-def streams(addons,item):
+def torrent_link(stream,server=""):
+    link=stream.get("url","")
+    info=str(stream.get("infoHash","")).lower()
+    if not re.fullmatch("[a-f0-9]{40}",info):
+        found=re.search(r"[?&]xt=urn:btih:([a-fA-F0-9]{40})(?:&|$)",link) if isinstance(link,str) else None
+        info=found.group(1).lower() if found else ""
+    if not info:
+        return (link,True) if isinstance(link,str) and urlparse.urlsplit(link).path.lower().endswith(".torrent") else ("",False)
+    index=stream.get("fileIdx")
+    p=urlparse.urlsplit(server)
+    if p.scheme in ("http","https") and p.hostname and not p.username and isinstance(index,int) and not isinstance(index,bool) and index>=0:
+        return server.rstrip("/")+"/"+info+"/"+str(index),False
+    magnet=link if isinstance(link,str) and link.startswith("magnet:?") else "magnet:?xt=urn:btih:"+info
+    if isinstance(index,int) and index>=0 and "so=" not in magnet:magnet+="&so="+str(index)
+    for source in stream.get("sources",[])[:12]:
+        if isinstance(source,str) and source.startswith("tracker:"):magnet+="&tr="+urlparse.quote(source[8:],safe="")
+    return magnet,True
+
+def subtitle_rank(lang):
+    value=str(lang).lower().replace("_","-")
+    return 0 if value in ("pob","pt-br","por-br") else 1 if value in ("por","pt","pt-pt") else 2
+
+def subtitles(addons,item):
+    typ=item.get("type","movie");ident=item.get("_episode") or item.get("id","")
+    tracks=[];needs_config=False
+    def query(u):
+        m=manifest(u)
+        if not supports(m,"subtitles",typ,ident):return [],False
+        if (m.get("behaviorHints") or {}).get("configurationRequired"):return [],True
+        result=get_json(base(u)+"subtitles/"+enc(typ)+"/"+enc(ident)+".json").get("subtitles",[])
+        return [x for x in result[:100] if isinstance(x,dict) and urlparse.urlsplit(str(x.get("url",""))).scheme in ("http","https")],False
+    with futures.ThreadPoolExecutor(max_workers=5) as pool:
+        for f in futures.as_completed([pool.submit(query,u) for u in addons[:20]]):
+            try:
+                rows,config=f.result();tracks.extend(rows);needs_config=needs_config or config
+            except Exception:pass
+    tracks.sort(key=lambda x:subtitle_rank(x.get("lang","")))
+    return tracks[:100],needs_config
+
+def streams(addons,item,torrent_server=""):
     typ=item.get("type","movie");ident=item.get("_episode") or item.get("id","")
     out=[]
     for u in addons[:20]:
@@ -199,10 +240,12 @@ def streams(addons,item):
             for x in data.get("streams",[])[:60]:
                 if not isinstance(x,dict):continue
                 link=x.get("url","")
-                if not isinstance(link,str) or urlparse.urlsplit(link).scheme not in ("http","https"):continue
+                routed,external=torrent_link(x,torrent_server)
+                if routed:link=routed
+                if not isinstance(link,str) or (not external and urlparse.urlsplit(link).scheme not in ("http","https")):continue
                 if (x.get("behaviorHints") or {}).get("proxyHeaders"):continue
                 label=" ".join(str(t) for t in (m.get("name",""),x.get("name",""),x.get("title","")))
-                out.append(dict(item,_url=link,_label=label))
+                out.append(dict(item,_url=link,_label=label,_external=external))
                 if len(out)>=64:break
         except Exception:continue
     used=set();good=[]
@@ -212,7 +255,10 @@ def streams(addons,item):
 
 def probe(item):
     link=item["_url"]
-    req=request.Request(link,headers={"Range":"bytes=0-2047","Accept-Encoding":"identity","User-Agent":"TelaresPlay/0.1"})
+    if item.get("_external"):return None
+    headers={"Accept-Encoding":"identity","User-Agent":"TelaresPlay/RC13"}
+    if not urlparse.urlsplit(link).path.lower().endswith((".m3u8",".mpd")):headers["Range"]="bytes=0-2047"
+    req=request.Request(link,headers=headers)
     try:
         with request.urlopen(req,timeout=6) as r:
             if r.status not in (200,206):return None
@@ -224,10 +270,11 @@ def probe(item):
         if b"<html" in start or b"<!doctype" in start or start.startswith(b'{"error"'):return None
         p=urlparse.urlsplit(final)
         if urlparse.urlsplit(link).scheme=="https" and p.scheme!="https":return None
-        likely=b"ftyp" in chunk[:12] or b"#EXTM3U" in chunk[:16] or any(t in ct for t in ("video/","audio/","mpegurl","octet-stream")) or p.path.lower().endswith((".mp4",".m3u8",".m4v",".mov",".ts",".mkv"))
+        likely=b"ftyp" in chunk[:12] or b"#EXTM3U" in chunk[:16] or b"<MPD" in chunk[:1024] or any(t in ct for t in ("video/","audio/","mpegurl","dash+xml","octet-stream")) or p.path.lower().endswith((".mp4",".m3u8",".mpd",".m4v",".mov",".ts",".mkv"))
         return dict(item,_url=final) if likely else None
     except Exception:return None
 
 def verified(candidates):
     with futures.ThreadPoolExecutor(max_workers=4) as pool:
         return [x for x in pool.map(probe,candidates[:16]) if x]
+

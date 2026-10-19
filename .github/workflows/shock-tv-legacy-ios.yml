@@ -22,16 +22,16 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --prefix=Telares-Source/ \
-            -o dist/Telares-RC12-Complete-Source.zip HEAD
-          unzip -t dist/Telares-RC12-Complete-Source.zip | tail -n 2
-          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/android/app/build.gradle'
-          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/ios/Makefile'
-          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/windows/main.py'
-          unzip -Z1 dist/Telares-RC12-Complete-Source.zip | grep -q 'Telares-Source/legacy-tv-hub/widget/config.xml'
+            -o dist/Telares-RC13-Complete-Source.zip HEAD
+          unzip -t dist/Telares-RC13-Complete-Source.zip | tail -n 2
+          unzip -Z1 dist/Telares-RC13-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/android/app/build.gradle'
+          unzip -Z1 dist/Telares-RC13-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/ios/Makefile'
+          unzip -Z1 dist/Telares-RC13-Complete-Source.zip | grep -q 'Telares-Source/shock-tv-hub/windows/main.py'
+          unzip -Z1 dist/Telares-RC13-Complete-Source.zip | grep -q 'Telares-Source/legacy-tv-hub/widget/config.xml'
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-RC12-Complete-Source-ZIP
-          path: dist/Telares-RC12-Complete-Source.zip
+          name: Telares-RC13-Complete-Source-ZIP
+          path: dist/Telares-RC13-Complete-Source.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -138,12 +138,13 @@ jobs:
           grep -Ei 'arm|Mach-O' /tmp/shocktv-ios-binary.txt
           mkdir -p dist/Payload
           cp -a "$APP" dist/Payload/ShockTV.app
-          (cd dist && zip -qry Telares-Play-iOS9-v0.3.10-ARMv7.ipa Payload)
-          unzip -t dist/Telares-Play-iOS9-v0.3.10-ARMv7.ipa | tail -n 1
+          (cd dist && zip -qry Telares-Play-iOS9-v0.3.11-RC13-ARMv7.ipa Payload)
+          unzip -t dist/Telares-Play-iOS9-v0.3.11-RC13-ARMv7.ipa | tail -n 1
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-iOS9-v0.3.10-ARMv7-IPA
-          path: dist/Telares-Play-iOS9-v0.3.10-ARMv7.ipa
+          name: Telares-Play-iOS9-v0.3.11-RC13-ARMv7-IPA
+          path: dist/Telares-Play-iOS9-v0.3.11-RC13-ARMv7.ipa
           if-no-files-found: error
           retention-days: 30
+

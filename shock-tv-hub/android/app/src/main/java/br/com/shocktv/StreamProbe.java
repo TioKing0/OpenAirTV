@@ -138,13 +138,14 @@ public final class StreamProbe {
         int quality=o.qualityRank==1080?36:o.qualityRank==720?28:
             o.qualityRank==2160?22:o.qualityRank==480?12:14;
         int latency=(int)Math.min(15,Math.max(0,o.latencyMs/250));
-        return quality+language-latency;
+        int codec=o.label.toLowerCase(Locale.ROOT).matches(".*(hevc|h[ .]?265|av1).*")?20:0;
+        return quality+language-latency-codec;
     }
     private static Option probe(Option original)throws Exception{
         URI originalUri=new URI(original.url);
         if(!http(originalUri)||originalUri.getUserInfo()!=null)return null;
         URI current=originalUri;
-        boolean redirected=false;
+        boolean redirected=false,noRange=false;
         long start=System.currentTimeMillis();
         for(int hop=0;hop<6;hop++){
             HttpURLConnection conn=null;
@@ -154,7 +155,8 @@ public final class StreamProbe {
                 conn.setConnectTimeout(3000);
                 conn.setReadTimeout(4200);
                 conn.setRequestMethod("GET");
-                conn.setRequestProperty("Range","bytes=0-2047");
+                String path=current.getPath().toLowerCase(Locale.ROOT);
+                if(!noRange&&!path.endsWith(".m3u8")&&!path.endsWith(".mpd"))conn.setRequestProperty("Range","bytes=0-2047");
                 conn.setRequestProperty("Accept-Encoding","identity");
                 conn.setRequestProperty("User-Agent","Telares/1.0 (Android TV)");
                 // Only use addon-provided headers for original same-origin requests.
@@ -178,11 +180,11 @@ public final class StreamProbe {
                     if("https".equalsIgnoreCase(current.getScheme())&&!"https".equalsIgnoreCase(next.getScheme()))return null;
                     current=next;redirected=true;continue;
                 }
+                if((status==400||status==405||status==416)&&!noRange){noRange=true;hop--;continue;}
                 if(status!=200&&status!=206)return null;
                 String contentType=conn.getContentType();
                 String mime=contentType==null?"":contentType.toLowerCase(Locale.ROOT);
-                if(mime.contains("text/html")||mime.contains("application/json")||
-                   mime.contains("text/xml"))return null;
+                if(mime.contains("text/html")||mime.contains("application/json")||mime.contains("bittorrent"))return null;
                 byte[] sample;
                 try(InputStream input=conn.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                     byte[] buffer=new byte[1024];int n;
@@ -195,13 +197,12 @@ public final class StreamProbe {
                 String preview=new String(sample,0,Math.min(sample.length,90),StandardCharsets.UTF_8)
                    .trim().toLowerCase(Locale.ROOT);
                 if(preview.startsWith("<!doctype")||preview.startsWith("<html")||
-                   preview.startsWith("{\"error\"")||preview.startsWith("<error")||
-                   preview.startsWith("<?xml")&&!mime.contains("dash"))return null;
+                   preview.startsWith("{\"error\"")||preview.startsWith("<error"))return null;
                 String p=current.getPath().toLowerCase(Locale.ROOT);
                 boolean manifestHls=p.endsWith(".m3u8")||mime.contains("mpegurl")||
                                     preview.startsWith("#extm3u");
                 boolean manifestDash=p.endsWith(".mpd")||mime.contains("dash+xml")||
-                                     preview.startsWith("<mpd");
+                                     preview.startsWith("<mpd")||new String(sample,StandardCharsets.UTF_8).contains("<MPD");
                 boolean media=mime.startsWith("video/")||mime.startsWith("audio/")||
                               mime.contains("octet-stream")||mime.contains("matroska")||
                               p.endsWith(".mp4")||p.endsWith(".webm")||p.endsWith(".mkv")||
@@ -231,3 +232,4 @@ public final class StreamProbe {
         return url.getScheme().toLowerCase(Locale.ROOT)+"://"+url.getHost().toLowerCase(Locale.ROOT)+":"+port;
     }
 }
+

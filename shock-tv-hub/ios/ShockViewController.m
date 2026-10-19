@@ -1,6 +1,7 @@
 #import "ShockViewController.h"
 #import "ShockDetailViewController.h"
 #import "ShockStreamChecker.h"
+#import "TelaresSubtitles.h"
 #import <ImageIO/ImageIO.h>
 #import <math.h>
 
@@ -111,6 +112,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,strong) NSArray *workingStreams;
 @property(nonatomic,strong) NSDictionary *selectedMedia;
 @property(nonatomic,strong) AVPlayerItem *observedPlayerItem;
+@property(nonatomic,strong) TelaresSubtitles *smartSubtitles;
 @property(nonatomic,strong) UIButton *playerSourceButton;
 @property(nonatomic,assign) NSInteger playingSourceIndex;
 @property(nonatomic,assign) NSUInteger streamRequestGeneration;
@@ -145,7 +147,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (UIColor *)dark { return [UIColor colorWithRed:0.037 green:0.071 blue:0.12 alpha:1]; }
 - (UIColor *)accent { return [UIColor colorWithRed:0.39 green:0.84 blue:0.91 alpha:1]; }
 - (NSArray *)defaultSources {
-    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate,kDefaultIPTV,kDefaultPlavio,kDefaultTvvio,kDefaultDC];
+    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate,kDefaultIPTV,kDefaultPlavio,kDefaultTvvio,kDefaultDC,@"https://opensubtitlesv3-pro.dexter21767.com/manifest.json"];
 }
 - (NSString *)str:(id)value {
     return [value isKindOfClass:[NSString class]] ? value : @"";
@@ -628,8 +630,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if([kind isEqualToString:@"tv"]||[kind isEqualToString:@"channel"])return YES;
     NSString *origin=[self normalizedCategory:[NSString stringWithFormat:@"%@ %@ %@",
         [self str:manifest[@"id"]],[self str:manifest[@"name"]],source]];
-    if([origin containsString:@"catalogo iptv"]||[origin containsString:@"tvvio"]||
-       [origin containsString:@"iptv"])return YES;
+    if(([origin containsString:@"catalogo iptv"]||[origin containsString:@"tvvio"])&&
+       ![kind isEqualToString:@"movie"])return YES;
     NSString *label=[self normalizedCategory:[NSString stringWithFormat:@"%@ %@",
         [self str:cat[@"name"]],[self str:cat[@"id"]]]];
     if([label containsString:@"canais ao vivo"]||[label containsString:@"live channels"]||
@@ -1062,6 +1064,23 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 }
             }]];
     }
+    [alert addAction:[UIAlertAction actionWithTitle:@"Configurar OpenSubtitles" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        [[UIApplication sharedApplication]openURL:[NSURL URLWithString:@"https://opensubtitlesv3-pro.dexter21767.com/configure"]];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Servidor BitTorrent" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        UIAlertController *server=[UIAlertController alertControllerWithTitle:@"Motor Stremio HTTP"
+            message:@"Servidor na rede, ex.: http://192.168.1.10:11470. Vazio desativa. Não há motor BitTorrent embutido no iPad."
+            preferredStyle:UIAlertControllerStyleAlert];
+        [server addTextFieldWithConfigurationHandler:^(UITextField *field){field.keyboardType=UIKeyboardTypeURL;
+            field.autocapitalizationType=UITextAutocapitalizationTypeNone;field.text=[[NSUserDefaults standardUserDefaults]stringForKey:@"telares_torrent_server"];}];
+        [server addAction:[UIAlertAction actionWithTitle:@"Salvar" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){
+            NSString *value=server.textFields.firstObject.text?:@"";NSURL *u=[NSURL URLWithString:value];
+            if(value.length&&(!u.host||u.user||(![u.scheme isEqualToString:@"http"]&&![u.scheme isEqualToString:@"https"]))){[self notice:@"Use um servidor HTTP(S) sem credenciais na URL."];return;}
+            [[NSUserDefaults standardUserDefaults]setObject:value forKey:@"telares_torrent_server"];
+        }]];
+        [server addAction:[UIAlertAction actionWithTitle:@"Cancelar" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:server animated:YES completion:nil];
+    }]];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field){
         field.placeholder=@"https://servidor/manifest.json";
         field.keyboardType=UIKeyboardTypeURL;
@@ -1346,7 +1365,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 self.liveMessage.text=@"Este canal não retornou um endereço HTTP/HLS compatível.";
                 self.liveFullscreen.hidden=YES;
             }else{
-                [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Opções BitTorrent não são reproduzidas diretamente no iPad."];
+                [self notice:@"Nenhuma fonte HTTP/HLS compatível foi encontrada neste título. Fontes BitTorrent exigem servidor Stremio configurado em Fontes e índice de arquivo. DASH, HEVC e DRM podem exigir outro dispositivo; o iOS 9 usa AVPlayer H.264/AAC."];
             }
             return;
         }
@@ -1367,6 +1386,16 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             if(item!=self.selectedMedia)return;
             if(!error)for(NSDictionary *stream in [self arr:payload[@"streams"]]){
                 NSString *link=[self str:stream[@"url"]];
+                NSString *hash=[[self str:stream[@"infoHash"]]lowercaseString];
+                NSString *server=[[NSUserDefaults standardUserDefaults]stringForKey:@"telares_torrent_server"];
+                NSNumber *file=[stream[@"fileIdx"]isKindOfClass:[NSNumber class]]?stream[@"fileIdx"]:nil;
+                NSCharacterSet *notHex=[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"]invertedSet];
+                NSURL *serverURL=[NSURL URLWithString:server?:@""];
+                if(hash.length==40&&[hash rangeOfCharacterFromSet:notHex].location==NSNotFound&&file&&file.integerValue>=0&&
+                    serverURL.host&&!serverURL.user&&([serverURL.scheme isEqualToString:@"http"]||[serverURL.scheme isEqualToString:@"https"])){
+                    NSString *base=[server stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]];
+                    link=[NSString stringWithFormat:@"%@/%@/%ld",base,hash,(long)file.integerValue];
+                }
                 NSURL *url=[NSURL URLWithString:link];
                 if(!url.host||(![url.scheme.lowercaseString isEqualToString:@"https"]&&
                     ![url.scheme.lowercaseString isEqualToString:@"http"]))continue;
@@ -1407,6 +1436,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     NSString *kind=[self str:item[@"_kind"]];
     NSString *type=[self str:item[@"type"]];
     NSString *origin=[self normalizedCategory:[self str:item[@"_base"]]];
+    if([kind isEqualToString:@"movie"]||[type isEqualToString:@"movie"])return NO;
     return [kind isEqualToString:@"tv"]||[type isEqualToString:@"tv"]||
            [type isEqualToString:@"channel"]||
            [origin containsString:@"catalogo iptv production"]||
@@ -1492,6 +1522,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     }];
 }
 - (void)cleanCurrentPlayer {
+    [self.smartSubtitles close];self.smartSubtitles=nil;
     [self removeTimeMonitor];
     if(self.hasPlayerObservation&&self.observedPlayerItem){
         @try {[self.observedPlayerItem removeObserver:self forKeyPath:@"status"
@@ -1586,6 +1617,13 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
             }];
         }
         self.playerController.player=self.moviePlayer;
+        if(!live){
+            NSString *identifier=[self str:item[@"_episode"]];if(!identifier.length)identifier=[self str:item[@"id"]];
+            self.smartSubtitles=[[TelaresSubtitles alloc]initWithPlayer:self.moviePlayer controller:self.playerController
+                sources:[self.sources copy] type:[self str:item[@"type"]] identifier:identifier];
+            AVPlayerMediaSelectionCriteria *criteria=[[AVPlayerMediaSelectionCriteria alloc]initWithPreferredLanguages:@[@"pt-BR",@"pt"]preferredMediaCharacteristics:nil];
+            [self.moviePlayer setMediaSelectionCriteria:criteria forMediaCharacteristic:AVMediaCharacteristicLegible];
+        }
     }
     [self.moviePlayer play];
 }
@@ -1934,3 +1972,4 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (BOOL)shouldAutorotate{return YES;}
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations{return UIInterfaceOrientationMaskAll;}
 @end
+

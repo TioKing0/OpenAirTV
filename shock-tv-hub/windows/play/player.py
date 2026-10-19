@@ -22,6 +22,7 @@ class VideoEngine:
         self.instance=self.vlc.Instance("--quiet","--no-video-title-show","--network-caching=1200")
         self.player=self.instance.media_player_new()
         self.player.set_hwnd(hwnd)
+        self.subtitle_files=[]
         self.hooks=[]
         events=self.player.event_manager()
         for attr,name in (("MediaPlayerEncounteredError","error"),("MediaPlayerPlaying","playing"),("MediaPlayerEndReached","ended")):
@@ -32,6 +33,10 @@ class VideoEngine:
         self.player.stop()
         self.player.set_media(self.instance.media_new(url))
         self.player.play()
+    def subtitle(self,path):
+        self.subtitle_files.append(path)
+        self.player.add_slave(self.vlc.MediaSlaveType.subtitle,path.as_uri(),True)
+    def subtitle_delay(self,seconds):self.player.video_set_spu_delay(int(seconds*1_000_000))
     def stop(self):self.player.stop()
     def pause(self):self.player.pause()
     def seek(self,delta):
@@ -44,3 +49,7 @@ class VideoEngine:
     def close(self):
         try:self.player.stop();self.player.release();self.instance.release()
         except Exception:pass
+        for path in self.subtitle_files:
+            try:path.unlink()
+            except OSError:pass
+

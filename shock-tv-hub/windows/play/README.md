@@ -1,5 +1,9 @@
 # Telares Play Windows
 
+## RC13 · v0.2.10
+
+Rebuild RC13 com VLC, seleção automática HTTP/HLS/DASH, legendas OpenSubtitles Pro configuráveis, preferência PT-BR e sincronização. Em Fontes, configure o OpenSubtitles no navegador e adicione o manifesto personalizado retornado. BitTorrent usa servidor Stremio HTTP configurado em Fontes ou cliente externo instalado para magnet/.torrent. Não há motor BitTorrent embutido. As seções abaixo descrevem versões históricas; consulte `shock-tv-hub/design/RC13.md` para o escopo atual e limitações.
+
 Aplicativo de streaming separado do Telares Install. Catálogos, busca, episódios e fontes diretas de addons Stremio; reprodução VLC para mídia HTTP/HLS compatível; favoritos, histórico e retomada persistidos em AppData. Builds x86 e x64 usam libVLC 3.0.21 empacotado. Extraia o ZIP inteiro antes de abrir TelaresPlay.exe. Fontes BitTorrent com infoHash, DRM e requisições com cabeçalhos privados não são suportadas. Requer validação funcional em Windows real. A redistribuição de VLC está sujeita às licenças VideoLAN aplicáveis e aos avisos correspondentes.
 
 ## Novas categorias V0.2.0 (candidata)
@@ -21,3 +25,4 @@ Filtro Anime removido da navegação, sem apagar o gênero Animação e sem modi
 ## v0.2.4: novo guia para canais ao vivo
 
 Categorias à esquerda, lista de canais no meio, reprodução VLC embutida à direita. Filmes e Séries permanecem disponíveis e canais IPTV declarados tecnicamente `series` são exibidos exclusivamente no guia de canais. Fontes HLS/HTTP não verificadas por Range podem ser testadas pelo player com fallback. Isso não garante que fontes de terceiros estejam disponíveis.
+
