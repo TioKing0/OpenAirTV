@@ -48,7 +48,10 @@ def run(directory):
                 if valid and stats.decoded_video>0 and video.player.get_time()>1000:decoded=True;break
                 time.sleep(.1)
             assert decoded,'VLC did not decode '+source
-            video.resume(3);time.sleep(.4);assert video.position()>=2,'Seek failed'
+            video.player.set_pause(1);time.sleep(.2);video.resume(3);seek_deadline=time.monotonic()+5
+            while time.monotonic()<seek_deadline and video.position()<2:time.sleep(.1)
+            assert 2.5<=video.position()<=3.5,'Seek failed: '+('torrent' if source==url else source.rsplit('/',1)[-1])
+            video.player.set_pause(0)
             results.append({'protocol':'torrent' if source==url else 'hls' if 'm3u8' in source else 'dash','decoded_video':True,'seek':True})
         print(json.dumps({'native_version':engine.lt.version,'sha256':hashlib.sha256(original).hexdigest(),'range_reads':'passed','playback':results}))
     finally:

@@ -13,7 +13,7 @@ public final class TorrentEngine implements AutoCloseable {
     private final File root;
     private final SessionManager session=new SessionManager();
     private volatile boolean closed=false;
-    private TorrentHandle handle;private FileStorage files;private TorrentInfo info;
+    private AddTorrentParams params;private TorrentHandle handle;private FileStorage files;private TorrentInfo info;
     private ServerSocket server;private File media;private long size,offset;private int pieceLength;
     private final ExecutorService requests=Executors.newFixedThreadPool(3);
     private final Object diskLock=new Object();private volatile CountDownLatch flushed;private volatile int requestedPiece=-1;private volatile boolean readOK;
@@ -25,7 +25,7 @@ public final class TorrentEngine implements AutoCloseable {
         if(!root.mkdirs())throw new IOException("Não foi possível criar o cache de vídeo");
         session.addListener(new AlertListener(){
             public int[] types(){return new int[]{AlertType.READ_PIECE.swig()};}
-            public void alert(Alert<?> alert){ReadPieceAlert read=(ReadPieceAlert)alert;CountDownLatch latch=flushed;if(latch!=null&&read.piece()==requestedPiece){readOK=read.error().value()==0;latch.countDown();}}
+            public void alert(Alert<?> alert){ReadPieceAlert read=(ReadPieceAlert)alert;CountDownLatch latch=flushed;if(latch!=null&&read.piece()==requestedPiece){readOK=!read.error().isError();latch.countDown();}}
         });
         SettingsPack settings=new SettingsPack();settings.setEnableDht(true);settings.setEnableLsd(true);settings.connectionsLimit(60);settings.listenInterfaces("0.0.0.0:0");
         if(localFixture)settings.setBoolean(org.libtorrent4j.swig.settings_pack.bool_types.ssrf_mitigation.swigValue(),false);
@@ -45,7 +45,7 @@ public final class TorrentEngine implements AutoCloseable {
             for(String part:source.substring(8).split("&"))if(part.matches("so=\\d+"))requested=Integer.parseInt(part.substring(3));
             byte[] metadata=session.fetchMagnet(source,60,root);
             if(metadata==null)throw new IOException("Fonte BitTorrent sem metadados ou peers disponíveis");
-            info=new TorrentInfo(metadata);
+            loadMetadata(metadata);
         }else{
             URI uri=new URI(source);String fragment=uri.getFragment();
             if(fragment!=null&&fragment.matches("telaresFile=\\d+"))requested=Integer.parseInt(fragment.substring(12));
@@ -53,7 +53,7 @@ public final class TorrentEngine implements AutoCloseable {
             HttpURLConnection conn=(HttpURLConnection)uri.toURL().openConnection();conn.setConnectTimeout(10000);conn.setReadTimeout(15000);
             try(InputStream in=conn.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                 byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1){out.write(buf,0,n);if(out.size()>4000000)throw new IOException("Metadados torrent muito grandes");}
-                info=new TorrentInfo(out.toByteArray());
+                loadMetadata(out.toByteArray());
             }finally{conn.disconnect();}
         }
         if(closed)throw new InterruptedException("Cancelado");
@@ -69,7 +69,9 @@ public final class TorrentEngine implements AutoCloseable {
         if(root.getUsableSpace()<size+128L*1024*1024)throw new IOException("Espaço insuficiente para o cache do vídeo");
         media=new File(root,names[selected]);
         Priority[] priorities=Priority.array(Priority.IGNORE,names.length);priorities[selected]=Priority.DEFAULT;
-        session.download(info,root,null,priorities,null,new org.libtorrent4j.swig.torrent_flags_t());
+        params.setSavePath(root.getAbsolutePath());params.filePriorities(priorities);
+        params.setFlags(params.getFlags().and_(TorrentFlags.PAUSED.inv()).and_(TorrentFlags.AUTO_MANAGED.inv()));
+        new SessionHandle(session.swig()).asyncAddTorrent(params);
         long deadline=System.currentTimeMillis()+10000;
         while(!closed&&(handle=session.find(info.infoHash()))==null){if(System.currentTimeMillis()>deadline)throw new IOException("Motor BitTorrent não iniciou");Thread.sleep(100);}
         if(closed)throw new InterruptedException("Cancelado");
@@ -82,6 +84,13 @@ public final class TorrentEngine implements AutoCloseable {
             }catch(IOException ignored){if(!closed)close();}
         },"Telares-Torrent-HTTP");accept.setDaemon(true);accept.start();
         return "http://127.0.0.1:"+server.getLocalPort()+"/"+token;
+    }
+    private void loadMetadata(byte[] bytes)throws IOException{
+        File metadata=new File(root,".metadata");
+        try(FileOutputStream out=new FileOutputStream(metadata)){out.write(bytes);}
+        try{params=new AddTorrentParams(org.libtorrent4j.swig.libtorrent.load_torrent_file(metadata.getAbsolutePath()));info=params.getTorrentInfo();
+            if(info==null||!info.isValid())throw new IOException("Metadados torrent inválidos");
+        }finally{metadata.delete();}
     }
     public static long[] range(String header,long size)throws IOException{
         if(header==null)return new long[]{0,size-1,0};
@@ -139,3 +148,4 @@ public final class TorrentEngine implements AutoCloseable {
     public void resume(){if(!closed)session.resume();}
     private static void delete(File file){File[] children=file.listFiles();if(children!=null)for(File child:children)delete(child);file.delete();}
 }
+
