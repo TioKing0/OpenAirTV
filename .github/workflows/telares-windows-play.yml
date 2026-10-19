@@ -41,7 +41,7 @@ jobs:
       - name: Install executable build requirements
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check pyinstaller==6.16.0 Pillow==11.1.0 python-vlc==3.0.21203
+          python -m pip install --disable-pip-version-check pyinstaller==6.16.0 Pillow==11.1.0 python-vlc==3.0.21203 libtorrent==2.0.11
           python shock-tv-hub/windows/generate_icon.py
       - name: Download and verify VideoLAN VLC runtime
         shell: pwsh
@@ -60,20 +60,36 @@ jobs:
           if (-not (Test-Path (Join-Path $dll.DirectoryName "plugins"))) { throw "VLC plugins folder missing" }
           Copy-Item -Path $dll.DirectoryName -Destination shock-tv-hub/windows/play/vlc -Recurse
           Write-Host "VLC verified and copied:" $dll.DirectoryName
+      - name: Generate synthetic playback media
+        shell: pwsh
+        run: |
+          if (!(Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --yes --no-progress }
+          $env:Path += ";C:\ProgramData\chocolatey\bin"
+          python shock-tv-hub/scripts/generate_playback_fixtures.py shock-tv-hub/test-fixtures
+      - name: Native torrent and bundled VLC playback smoke test
+        shell: pwsh
+        run: python shock-tv-hub/windows/play/self_test.py shock-tv-hub/test-fixtures
       - name: Build standalone Telares Play
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name TelaresPlay --icon shock-tv-hub/windows/TelaresInstall.ico --paths shock-tv-hub/windows/play --hidden-import vlc --add-data "shock-tv-hub/windows/play/vlc;vlc" shock-tv-hub/windows/play/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --contents-directory . --noconsole --name TelaresPlay --icon shock-tv-hub/windows/TelaresInstall.ico --paths shock-tv-hub/windows/play --hidden-import vlc --hidden-import libtorrent --hidden-import self_test --copy-metadata libtorrent --add-data "shock-tv-hub/windows/play/vlc;vlc" shock-tv-hub/windows/play/main.py
           if (!(Test-Path dist/TelaresPlay/TelaresPlay.exe)) { throw "Missing TelaresPlay.exe" }
           if (!(Test-Path dist/TelaresPlay/vlc/libvlc.dll)) { throw "Missing VLC runtime" }
           if (!(Test-Path dist/TelaresPlay/vlc/plugins)) { throw "Missing VLC codecs" }
           Copy-Item shock-tv-hub/windows/play/README.md dist/TelaresPlay/LEIA-ME.txt
-          Compress-Archive -Path dist/TelaresPlay/* -DestinationPath "dist/Telares-Play-Windows-v0.2.10-RC13-${{ matrix.arch }}-PORTABLE.zip" -CompressionLevel Optimal
-          if (!(Test-Path "dist/Telares-Play-Windows-v0.2.10-RC13-${{ matrix.arch }}-PORTABLE.zip")) { throw "ZIP missing" }
+          Copy-Item shock-tv-hub/windows/play/THIRD-PARTY-TORRENT.txt dist/TelaresPlay/THIRD-PARTY-TORRENT.txt
+          Compress-Archive -Path dist/TelaresPlay/* -DestinationPath "dist/Telares-Play-Windows-v0.2.11-RC14-${{ matrix.arch }}-PORTABLE.zip" -CompressionLevel Optimal
+          if (!(Test-Path "dist/Telares-Play-Windows-v0.2.11-RC14-${{ matrix.arch }}-PORTABLE.zip")) { throw "ZIP missing" }
+      - name: Verify packaged executable playback
+        shell: pwsh
+        run: |
+          $task = Start-Process -FilePath "dist/TelaresPlay/TelaresPlay.exe" -ArgumentList @("--self-test", "$((Get-Location).Path)/shock-tv-hub/test-fixtures") -PassThru -WindowStyle Hidden
+          if (!$task.WaitForExit(120000)) { $task.Kill(); throw "Packaged playback timed out" }
+          if ($task.ExitCode -ne 0) { throw "Packaged native playback failed" }
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-Windows-v0.2.10-RC13-${{ matrix.arch }}-Portable
-          path: dist/Telares-Play-Windows-v0.2.10-RC13-${{ matrix.arch }}-PORTABLE.zip
+          name: Telares-Play-Windows-v0.2.11-RC14-${{ matrix.arch }}-Portable
+          path: dist/Telares-Play-Windows-v0.2.11-RC14-${{ matrix.arch }}-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
 

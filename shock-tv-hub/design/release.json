@@ -1,37 +1,37 @@
 {
   "brand": "TELARES",
-  "batch": "telares-smart-playback-rc13",
-  "revision": 2,
-  "date": "2026-10-18",
-  "feature": "Smart Playback Media3, decoder fallback, HLS/DASH probes, BitTorrent HTTP bridge/external engine, configurable OpenSubtitles Pro, PT-BR subtitles and sync, mixed-catalog classification fixes",
+  "batch": "telares-integrated-playback-rc14",
+  "revision": 1,
+  "date": "2026-10-19",
+  "feature": "OpenSubtitles and manual service setup removed; embedded BitTorrent Android/Windows; verified playback and seek tests with generated H264/AAC, HLS and DASH media",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc13",
+      "version": "1.0.0-rc14",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.10"
+      "version": "0.2.11"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.10"
+      "version": "0.2.11"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc13",
+      "version": "0.1.0-rc14",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -122,8 +122,7 @@
     "https://catalogo-iptv-production.up.railway.app/manifest.json",
     "https://plaviohd.edon.workers.dev/manifest.json",
     "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
-    "https://h-gate.site/dc/manifest.json",
-    "https://opensubtitlesv3-pro.dexter21767.com/manifest.json"
+    "https://h-gate.site/dc/manifest.json"
   ],
   "liveTv": {
     "protocolTypes": [
@@ -177,8 +176,8 @@
     "androidTvInlinePreview": "muted Media3 preview with fallback; user can open fullscreen"
   },
   "smartPlayback": {
-    "torrentEngine": "User-configured Stremio-compatible HTTP server; fileIdx required, otherwise external magnet client on Android/Windows. No embedded torrent engine.",
-    "subtitles": "OpenSubtitles Pro configurationRequired: configure account locally and add resulting manifest. PT-BR preferred; SRT/WebVTT delay on Android/iOS and VLC subtitle delay on Windows.",
-    "validation": "CI required; physical devices and provider availability not certified"
+    "torrentEngine": "Native libtorrent4j 2.1.0-39 for Android four ABIs; libtorrent 2.0.11 for Windows x86/x64. Tokenized loopback HTTP, verified pieces, bounded cache, no separate daemon/account/setup. iOS 9 keeps HTTP/HLS only.",
+    "subtitles": "OpenSubtitles removed. Embedded media tracks remain available; no service account required.",
+    "validation": "Native engine byte/range tests, VLC decoding and seek on both architectures including packaged executables, Media3 rendered video and seek on Android emulator. Physical devices remain unverified."
   }
 }

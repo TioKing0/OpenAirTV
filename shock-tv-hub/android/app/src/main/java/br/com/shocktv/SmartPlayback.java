@@ -7,7 +7,6 @@ import org.json.JSONObject;
 
 /** Protocol routing: a torrent is never passed to an HTTP decoder. */
 public final class SmartPlayback {
-    public static final String SUBTITLE_ADDON="https://opensubtitlesv3-pro.dexter21767.com/manifest.json";
     private SmartPlayback(){}
     public static boolean http(String value){
         try { URI u=new URI(value);return u.getHost()!=null&&u.getUserInfo()==null&&
@@ -21,18 +20,16 @@ public final class SmartPlayback {
         java.util.regex.Matcher m=java.util.regex.Pattern.compile("(?i)(?:[?&])xt=urn:btih:([a-f0-9]{40})(?:&|$)").matcher(url);
         return m.find()?m.group(1).toLowerCase(Locale.ROOT):"";
     }
-    public static String torrentUrl(JSONObject stream,String server){
-        String hash=torrentHash(stream);
-        // Stremio-compatible streaming server resolves the selected torrent file.
-        // No guessed file index: unknown/multi-file torrents go to a torrent application.
-        int file=stream.optInt("fileIdx",-1);
-        if(hash.isEmpty()||file<0||!http(server))return "";
-        return server.replaceAll("/+$","")+"/"+hash+"/"+file;
+    public static boolean removedAddon(String value){
+        try{return new URI(value).getHost().toLowerCase(Locale.ROOT).contains("opensubtitles");}catch(Exception e){return false;}
+    }
+    public static boolean isTorrent(String value){
+        return value!=null&&(value.startsWith("magnet:?")||(http(value)&&value.toLowerCase(Locale.ROOT).split("[?#]",2)[0].endsWith(".torrent")));
     }
     public static String magnet(JSONObject stream){
         String original=stream.optString("url","");
         if(original.startsWith("magnet:?")&&original.length()<16384)return original;
-        if(http(original)&&original.toLowerCase(Locale.ROOT).split("[?#]",2)[0].endsWith(".torrent"))return original;
+        if(http(original)&&original.toLowerCase(Locale.ROOT).split("[?#]",2)[0].endsWith(".torrent"))return original+(stream.has("fileIdx")?"#telaresFile="+stream.optInt("fileIdx",-1):"");
         String hash=torrentHash(stream);if(hash.isEmpty())return "";
         String result="magnet:?xt=urn:btih:"+hash;
         int file=stream.optInt("fileIdx",-1);if(file>=0)result+="&so="+file;

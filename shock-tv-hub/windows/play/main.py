@@ -33,7 +33,7 @@ def persist(state):
     os.replace(temp,STATE_FILE)
 
 def safe_item(item):
-    return {k:v for k,v in item.items() if k not in ("_url","_label","_external","_subtitle_tracks") and
+    return {k:v for k,v in item.items() if k not in ("_url","_label","_torrent","_file_index") and
             isinstance(v,(str,int,float,bool,list,dict))}
 
 class TelaresPlay:
@@ -50,6 +50,8 @@ class TelaresPlay:
         self.addons=list(dict.fromkeys((self.data.get("addons") or [])+
             [url for url in catalog.DEFAULT if url not in self.removed_defaults]))
         # Preserve user-customized addons and explicit opt-outs while migrating new defaults.
+        self.addons=[url for url in self.addons if not catalog.removed_addon(url)]
+        self.data.pop("torrent_server",None)
         self.data["addons"]=self.addons
         persist(self.data)
         self.executor=concurrent.futures.ThreadPoolExecutor(max_workers=7)
@@ -64,7 +66,7 @@ class TelaresPlay:
         self.image_pending=set()
         self.references=[]
         self.video=None
-        self.subtitle_tracks=[];self.subtitle_config=False;self.subtitle_delay=0;self.subtitle_selected=None
+        self.subtitle_delay=0
         self.source_list=[]
         self.source_index=-1
         self.current_item=None
@@ -119,7 +121,7 @@ class TelaresPlay:
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
-        self.label(self.nav,"v0.2.10 RC13 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
+        self.label(self.nav,"v0.2.11 RC14 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
         self.right=tk.Frame(self.root,bg=BG)
         self.right.pack(side="left",fill="both",expand=True)
         bar=tk.Frame(self.right,bg=BG,height=78)
@@ -467,15 +469,7 @@ class TelaresPlay:
         def done(source_list):
             if seq!=self.req:return
             if not source_list:
-                messagebox.showwarning("Telares Play","Não foram encontradas fontes HTTP/HLS/DASH ou BitTorrent utilizáveis. Configure o servidor BitTorrent em Fontes quando necessário. DRM depende de um cliente autorizado.")
-                return
-            external=[x for x in source_list if x.get("_external")]
-            source_list=[x for x in source_list if not x.get("_external")]
-            if not source_list and external:
-                window=tk.Toplevel(self.root);window.title("Motor BitTorrent externo")
-                self.label(window,"Selecione uma fonte para o aplicativo BitTorrent instalado.",12).pack(padx=15,pady=10)
-                for entry in external[:24]:
-                    self.btn(window,entry["_label"][:100],lambda u=entry["_url"]:self.open_torrent(u)).pack(fill="x")
+                messagebox.showwarning("Telares Play","Não foram encontradas fontes HTTP/HLS/DASH ou BitTorrent utilizáveis. DRM depende de um cliente autorizado.")
                 return
             self.source_list=source_list
             self.source_index=0
@@ -483,19 +477,13 @@ class TelaresPlay:
             self.resume_sec=0 if item.get("_kind")=="tv" else float(self.get_entry(item).get("position") or 0)
             self.enter_player()
             self.play_source()
-            self.subtitle_tracks=[];self.subtitle_selected=None;self.subtitle_delay=0
-            def got_subtitles(result):
-                if seq!=self.req or not self.playing:return
-                self.subtitle_tracks,self.subtitle_config=result
-                if self.subtitle_tracks and catalog.subtitle_rank(self.subtitle_tracks[0].get("lang",""))==0:self.apply_subtitle(0)
-            if item.get("_kind")!="tv":self.job(lambda:catalog.subtitles(self.addons,item),got_subtitles)
         def select_sources():
-            candidates=catalog.streams(self.addons,item,self.data.get("torrent_server",""))
+            candidates=catalog.streams(self.addons,item)
             if item.get("_kind")=="tv":
                 # Channels are continuous HLS/HTTP signals. Avoid downloading
                 # segments with Range before giving the bundled VLC a chance.
                 return [x for x in candidates[:16] if x["_url"].startswith(("http://","https://"))]
-            return catalog.verified(candidates)+[x for x in candidates if x.get("_external")]
+            return catalog.verified(candidates)+[x for x in candidates if x.get("_torrent")]
         self.job(select_sources,done,
                 lambda reason:messagebox.showerror("Erro ao abrir o vídeo",reason))
 
@@ -542,8 +530,22 @@ class TelaresPlay:
         self.started=False
         self.play_started_at=time.monotonic()
         self.video_note.config(text="Fonte {}/{} • iniciando".format(self.source_index+1,len(self.source_list)))
-        self.video.play(chosen["_url"])
-        if self.subtitle_selected is not None:self.apply_subtitle(self.subtitle_selected)
+        if self.video.torrent:self.video.torrent.close();self.video.torrent=None
+        if chosen.get("_torrent"):
+            from torrent_engine import TorrentEngine
+            video=self.video;index=self.source_index;token=self.req
+            try:engine=TorrentEngine();video.torrent=engine
+            except Exception:
+                self.next_source();return
+            self.video_note.config(text="Preparando BitTorrent · aguardando dados…")
+            def ready(url):
+                if self.playing and self.video is video and self.req==token and self.source_index==index and video.torrent is engine:video.play(url)
+                else:engine.close()
+            def failed(error):
+                engine.close()
+                if self.playing and self.video is video and self.req==token and self.source_index==index:self.next_source()
+            self.job(lambda:engine.open(chosen["_url"],chosen.get("_file_index")),ready,failed)
+        else:self.video.play(chosen["_url"])
 
     def next_source(self):
         if not self.playing:return
@@ -573,7 +575,7 @@ class TelaresPlay:
         if self.playing and self.video:
             if self.started and time.monotonic()-self.last_save>10:
                 self.last_save=time.monotonic();self.save_progress()
-            if not self.started and time.monotonic()-self.play_started_at>22:
+            if not self.started and time.monotonic()-self.play_started_at>(100 if self.current_item and self.source_list[self.source_index].get("_torrent") else 22):
                 self.next_source()
         self.root.after(1500,self.tick)
 
@@ -617,50 +619,21 @@ class TelaresPlay:
         if self.full:self.fullscreen()
         elif self.playing:self.exit_player()
 
-    def open_torrent(self,url):
-        try:os.startfile(url)
-        except Exception:messagebox.showwarning("BitTorrent","Instale um aplicativo BitTorrent compatível ou configure um servidor Stremio em Fontes.")
-
-    def apply_subtitle(self,index):
-        if not self.video:return
-        self.subtitle_selected=index
-        video=self.video;token=self.req
-        url=self.subtitle_tracks[index]["url"]
-        def ready(path):
-            if token==self.req and self.video is video and self.playing and self.subtitle_selected==index:
-                video.subtitle(path);video.subtitle_delay(self.subtitle_delay)
-            else:
-                try:path.unlink()
-                except OSError:pass
-        def download():
-            import tempfile
-            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"TelaresPlay/RC13"}),timeout=8) as r:body=r.read(2_000_001)
-            if len(body)>2_000_000:raise ValueError("Legenda muito grande")
-            suffix=pathlib.Path(catalog.urlparse.urlsplit(url).path).suffix.lower()
-            if suffix not in (".srt",".vtt",".ass",".ssa"):suffix=".srt"
-            with tempfile.NamedTemporaryFile(prefix="telares-sub-",suffix=suffix,delete=False) as f:f.write(body);return pathlib.Path(f.name)
-        self.job(download,ready,lambda error:messagebox.showwarning("Legenda","Não foi possível carregar a legenda selecionada."))
-
     def subtitles_dialog(self):
-        window=tk.Toplevel(self.root);window.title("Legendas · PT-BR preferencial")
-        listing=tk.Listbox(window,width=75,height=14);listing.pack(padx=12,pady=12)
-        for track in self.subtitle_tracks:listing.insert("end",str(track.get("lang","und"))+" · "+str(track.get("label",track.get("id","Legenda"))))
-        def choose():
-            rows=listing.curselection()
-            if rows:self.apply_subtitle(rows[0])
-        self.btn(window,"Usar selecionada",choose).pack()
-        def off():
-            self.subtitle_selected=None
-            if self.video:self.video.player.video_set_spu(-1)
-        self.btn(window,"Desativar",off).pack()
+        if not self.video:return
+        window=tk.Toplevel(self.root);window.title("Legendas do vídeo")
+        tracks=self.video.player.video_get_spu_description() or []
+        for ident,name in tracks:
+            label=name.decode("utf-8","replace") if isinstance(name,bytes) else str(name)
+            self.btn(window,label,lambda n=ident:self.video.player.video_set_spu(n) if self.video else None).pack(fill="x")
+        if not tracks:self.label(window,"Esta fonte ainda não disponibilizou faixas de legenda.",12).pack(padx=15,pady=15)
+        note=self.label(window,"Atraso: {:.1f} s".format(self.subtitle_delay));note.pack()
         def delay(delta):
             self.subtitle_delay=max(-60,min(60,self.subtitle_delay+delta))
             if self.video:self.video.subtitle_delay(self.subtitle_delay)
             note.config(text="Atraso: {:.1f} s".format(self.subtitle_delay))
-        note=self.label(window,"Atraso: {:.1f} s".format(self.subtitle_delay));note.pack()
         self.btn(window,"Antecipar 0,5 s",lambda:delay(-.5)).pack(side="left")
         self.btn(window,"Atrasar 0,5 s",lambda:delay(.5)).pack(side="left")
-        if self.subtitle_config:self.label(window,"OpenSubtitles Pro exige configuração em Fontes.",11).pack()
 
     def sources_dialog(self):
         window=tk.Toplevel(self.root)
@@ -695,15 +668,6 @@ class TelaresPlay:
             self.data["addons"]=self.addons;persist(self.data);listing.delete(selection[0])
         self.btn(buttons,"Adicionar",add,CYAN,BG).pack(side="left",padx=7)
         self.btn(buttons,"Remover selecionado",remove).pack(side="left",padx=7)
-        def server():
-            value=simpledialog.askstring("Motor BitTorrent","Servidor HTTP compatível com Stremio, ex.: http://192.168.1.10:11470. Vazio desativa.",initialvalue=self.data.get("torrent_server",""),parent=window)
-            if value is None:return
-            p=catalog.urlparse.urlsplit(value)
-            if value and (p.scheme not in ("http","https") or not p.hostname or p.username):messagebox.showwarning("Servidor","Use HTTP(S) sem credenciais na URL.");return
-            self.data["torrent_server"]=value;persist(self.data)
-        self.btn(buttons,"BitTorrent",server).pack(side="left",padx=4)
-        import webbrowser
-        self.btn(buttons,"OpenSubtitles",lambda:webbrowser.open("https://opensubtitlesv3-pro.dexter21767.com/configure")).pack(side="left",padx=4)
         self.btn(buttons,"Fechar",window.destroy).pack(side="left",padx=7)
 
     def close(self):
@@ -717,5 +681,8 @@ class TelaresPlay:
     def run(self):self.root.mainloop()
 
 if __name__=="__main__":
+    if len(sys.argv)>2 and sys.argv[1]=="--self-test":
+        from self_test import run
+        sys.exit(run(sys.argv[2]))
     TelaresPlay().run()
 

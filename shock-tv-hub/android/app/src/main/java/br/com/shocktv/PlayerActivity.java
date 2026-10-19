@@ -44,7 +44,9 @@ import java.util.Set;
 public final class PlayerActivity extends Activity {
     private static final String TAG="Telares-Player";
     private ExoPlayer player;
-    private SmartSubtitles smartSubtitles;
+    private TorrentEngine torrentEngine;
+    private int torrentGeneration=0;
+    private final java.util.concurrent.ExecutorService torrentWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private PlayerView playerView;
     private UserLibrary library;
     private String currentKey;
@@ -59,7 +61,7 @@ public final class PlayerActivity extends Activity {
     private final Runnable periodic=new Runnable(){
         @Override public void run(){
             save(false);
-            if(player!=null)handler.postDelayed(this,10000L);
+            if(!closing)handler.postDelayed(this,10000L);
         }
     };
     private String[] queuedUrls,queuedKeys;
@@ -123,12 +125,11 @@ public final class PlayerActivity extends Activity {
         playerView.setKeepScreenOn(true);
         playerView.setShowSubtitleButton(true);
         layout.addView(playerView,new FrameLayout.LayoutParams(-1,-1));
-        smartSubtitles=new SmartSubtitles(this,layout);
+
         if(!queue)installQuickControls(layout);
         setContentView(layout);
         playOption(selectedIndex,lastKnownPosition,false);
-        if(!queue&&!isLive)smartSubtitles.load(getIntent().getStringArrayExtra("subtitleAddons"),
-            getIntent().getStringExtra("type"),getIntent().getStringExtra("videoId"));
+
         handler.postDelayed(periodic,10000L);
         playerView.requestFocus();
         playerView.hideController();
@@ -226,8 +227,7 @@ public final class PlayerActivity extends Activity {
         languageButton=control("Idioma");
         sourceButton=control("Fontes");
         top.addView(qualityButton);top.addView(languageButton);top.addView(sourceButton);
-        Button subtitles=control("Legendas");top.addView(subtitles);
-        subtitles.setOnClickListener(v->smartSubtitles.show());
+
         FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(-2,dp(52),Gravity.TOP|Gravity.RIGHT);
         params.topMargin=dp(6);params.rightMargin=dp(16);
         root.addView(top,params);
@@ -361,6 +361,28 @@ public final class PlayerActivity extends Activity {
         playOption(index,position,fromUser);
     }
     private void playOption(int index,long position,boolean initiated){
+        int generation=++torrentGeneration;
+        if(torrentEngine!=null){torrentEngine.close();torrentEngine=null;}
+        StreamProbe.Option chosen=verified.get(index);
+        if(SmartPlayback.isTorrent(chosen.url)){
+            if(player!=null){save(false);player.pause();}
+            Toast.makeText(this,"Preparando fonte BitTorrent…",Toast.LENGTH_LONG).show();
+            torrentWorker.execute(()->{
+                TorrentEngine engine=null;
+                try{
+                    engine=new TorrentEngine(getCacheDir());final TorrentEngine active=engine;
+                    handler.post(()->{if(!closing&&generation==torrentGeneration)torrentEngine=active;else active.close();});
+                    String local=engine.open(chosen.url);
+                    handler.post(()->{if(!closing&&generation==torrentGeneration)playResolved(index,position,initiated,local);else active.close();});
+                }catch(Throwable error){if(engine!=null)engine.close();
+                    handler.post(()->{if(!closing&&generation==torrentGeneration)handlePlaybackError(
+                        new PlaybackException("BitTorrent indisponível ou cache sem espaço",error,PlaybackException.ERROR_CODE_IO_UNSPECIFIED));});
+                }
+            });return;
+        }
+        playResolved(index,position,initiated,chosen.url);
+    }
+    private void playResolved(int index,long position,boolean initiated,String resolvedUrl){
         StreamProbe.Option chosen=verified.get(index);
         if(player!=null){
             player.pause();
@@ -394,7 +416,7 @@ public final class PlayerActivity extends Activity {
             .setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
             .setPreferredTextLanguages("pt-BR","pt","por").build());
-        smartSubtitles.bind(player);
+
         playerView.setPlayer(player);
         player.addListener(new Player.Listener(){
             @Override public void onPlaybackStateChanged(int state){
@@ -433,7 +455,7 @@ public final class PlayerActivity extends Activity {
                 items.add(createItem(queuedUrls[i],queuedKeys[i],record.title,null));
             }
         }
-        if(items.isEmpty())items.add(createItem(chosen.url,currentKey,title,chosen.mime));
+        if(items.isEmpty())items.add(createItem(resolvedUrl,currentKey,title,chosen.mime));
         player.setMediaItems(items,0,Math.max(0,position));
         String preference=getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("quality","");
         if(!preference.isEmpty()&&chosen.qualityRank>0){
@@ -456,6 +478,7 @@ public final class PlayerActivity extends Activity {
         return builder.build();
     }
     private static boolean isMediaUrl(String url){
+        if(SmartPlayback.isTorrent(url))return true;
         if(url==null)return false;
         try{
             java.net.URI uri=new java.net.URI(url);
@@ -522,6 +545,7 @@ public final class PlayerActivity extends Activity {
           .setNeutralButton("Player externo",(d,w)->{
               try{android.content.Intent intent=new android.content.Intent(android.content.Intent.ACTION_VIEW);
                   String mime=verified.get(selectedIndex).mime;
+                  if(SmartPlayback.isTorrent(verified.get(selectedIndex).url)){showingError=false;Toast.makeText(this,"A fonte BitTorrent não disponibilizou dados. Tente outra fonte.",Toast.LENGTH_LONG).show();return;}
                   intent.setDataAndType(android.net.Uri.parse(verified.get(selectedIndex).url),mime.isEmpty()?"video/*":mime);
                   intent.putExtra("position",(int)Math.max(0,lastKnownPosition));
                   startActivity(intent);showingError=false;
@@ -543,12 +567,14 @@ public final class PlayerActivity extends Activity {
     @Override protected void onPause(){
         save(false);
         if(player!=null)player.pause();
+        if(torrentEngine!=null)torrentEngine.pause();
         super.onPause();
     }
+    @Override protected void onResume(){super.onResume();if(torrentEngine!=null)torrentEngine.resume();}
     @Override protected void onStop(){save(false);super.onStop();}
     @Override protected void onDestroy(){
         closing=true;
-        if(smartSubtitles!=null)smartSubtitles.close();
+        torrentGeneration++;if(torrentEngine!=null)torrentEngine.close();torrentWorker.shutdownNow();
         handler.removeCallbacks(periodic);
         handler.removeCallbacks(hideControls);
         save(false);

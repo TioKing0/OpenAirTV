@@ -1,5 +1,10 @@
 # Telares Play Windows
 
+## RC14 · 0.2.11
+
+Motor BitTorrent nativo empacotado, sem servidor/aplicativo externo. OpenSubtitles e suas telas de configuração foram removidos, inclusive na migração dos dados. Legendas internas continuam disponíveis. Consulte `shock-tv-hub/design/RC14.md`; os registros abaixo são históricos.
+
+
 ## RC13 · v0.2.10
 
 Rebuild RC13 com VLC, seleção automática HTTP/HLS/DASH, legendas OpenSubtitles Pro configuráveis, preferência PT-BR e sincronização. Em Fontes, configure o OpenSubtitles no navegador e adicione o manifesto personalizado retornado. BitTorrent usa servidor Stremio HTTP configurado em Fontes ou cliente externo instalado para magnet/.torrent. Não há motor BitTorrent embutido. As seções abaixo descrevem versões históricas; consulte `shock-tv-hub/design/RC13.md` para o escopo atual e limitações.

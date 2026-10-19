@@ -19,9 +19,12 @@ def runtime():
 class VideoEngine:
     def __init__(self,hwnd,callback):
         self.vlc=runtime()
-        self.instance=self.vlc.Instance("--quiet","--no-video-title-show","--network-caching=1200")
+        options=["--quiet","--no-video-title-show","--network-caching=1200"]
+        if os.environ.get("TELARES_SELF_TEST")=="1":options.extend(["--vout=dummy","--aout=dummy"])
+        self.instance=self.vlc.Instance(*options)
         self.player=self.instance.media_player_new()
         self.player.set_hwnd(hwnd)
+        self.torrent=None
         self.subtitle_files=[]
         self.hooks=[]
         events=self.player.event_manager()
@@ -47,6 +50,7 @@ class VideoEngine:
     def is_playing(self):return bool(self.player.is_playing())
     def resume(self,seconds):self.player.set_time(int(max(0,seconds)*1000))
     def close(self):
+        if self.torrent:self.torrent.close();self.torrent=None
         try:self.player.stop();self.player.release();self.instance.release()
         except Exception:pass
         for path in self.subtitle_files:

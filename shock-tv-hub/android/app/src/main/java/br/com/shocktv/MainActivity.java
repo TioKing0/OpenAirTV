@@ -65,14 +65,14 @@ public final class MainActivity extends Activity {
     private static final String DC_UNIVERSE="https://h-gate.site/dc/manifest.json";
     private static final String[] BUNDLED_ADDONS={
         CINEMETA,FENIXFLIX,TORRENTIO,NETFLIX_CATALOG,PIRATEBAY_PLUS,
-        IPTV,PLAVIO,TVVIO,DC_UNIVERSE,SmartPlayback.SUBTITLE_ADDON
+        IPTV,PLAVIO,TVVIO,DC_UNIVERSE
     };
     private static final String[] BUNDLED_NAMES={
         "Cinemeta • Metadados","FenixFlix • Addon comunitário",
         "Torrentio • Busca de streams","Netflix Catalog • Metadados",
         "ThePirateBay+ • Busca de streams",
         "Catálogo IPTV • canais ao vivo","PlavioHD • Addon comunitário",
-        "Tvvio • canais ao vivo","DC Universe • Catálogo temático","OpenSubtitles v3 Pro • Legendas"
+        "Tvvio • canais ao vivo","DC Universe • Catálogo temático"
     };
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ExecutorService searchExecutor=Executors.newSingleThreadExecutor();
@@ -162,6 +162,9 @@ public final class MainActivity extends Activity {
                     sources.add(url);
             }
         }catch(Exception ignored){}
+        sources.removeIf(SmartPlayback::removedAddon);
+        getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).edit().remove("torrentServer").apply();
+        saveSources();
     }
     private void saveSources() {
         JSONArray custom=new JSONArray();
@@ -557,24 +560,8 @@ public final class MainActivity extends Activity {
               }
           })
           .setPositiveButton("Adicionar fonte",(d,w)->addSourceDialog())
-          .setNeutralButton("Reprodução e legendas", (d,w)->smartPlaybackSettings())
+
           .setNegativeButton("Fechar",null).show();
-    }
-    private void smartPlaybackSettings(){
-        new AlertDialog.Builder(this).setTitle("Smart Playback RC13")
-            .setItems(new String[]{"Servidor BitTorrent compatível com Stremio", "Configurar OpenSubtitles Pro"},(d,n)->{
-                if(n==1){try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://opensubtitlesv3-pro.dexter21767.com/configure")));}
-                    catch(Exception e){message("Abra opensubtitlesv3-pro.dexter21767.com/configure no navegador e adicione o manifesto configurado em Fontes.");}return;}
-                EditText field=new EditText(this);field.setSingleLine(true);
-                field.setHint("http://192.168.1.10:11470");
-                field.setText(getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("torrentServer",""));
-                new AlertDialog.Builder(this).setTitle("Motor BitTorrent HTTP")
-                    .setMessage("Use um servidor Stremio na sua rede. Sem servidor ou índice de arquivo, a fonte será aberta em um aplicativo BitTorrent compatível. Deixe vazio para desativar a ponte.")
-                    .setView(field).setPositiveButton("Salvar",(a,b)->{String value=field.getText().toString().trim();
-                        if(!value.isEmpty()&&!SmartPlayback.http(value)){message("Informe HTTP(S) sem usuário/senha na URL.");return;}
-                        getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).edit().putString("torrentServer",value).apply();})
-                    .setNegativeButton("Cancelar",null).show();
-            }).setNegativeButton("Fechar",null).show();
     }
     private JSONObject getManifest(String url) throws Exception{
         synchronized(manifestCache){
@@ -1902,7 +1889,7 @@ public final class MainActivity extends Activity {
             Set<String> seen=new HashSet<>();
             int torrents=0,external=0,bad=0,failed=0;
             ArrayList<String> torrentLinks=new ArrayList<>(),torrentLabels=new ArrayList<>();
-            String torrentServer=getSharedPreferences("shock_tv_stream_prefs",MODE_PRIVATE).getString("torrentServer","");
+
             for(String manifestUrl:new ArrayList<>(sources)){
                 try{
                     JSONObject manifest=getManifest(manifestUrl);
@@ -1918,8 +1905,7 @@ public final class MainActivity extends Activity {
                         if(!magnet.isEmpty()){
                             torrents++;
                             if(torrentLinks.size()<24){torrentLinks.add(magnet);torrentLabels.add(stream.optString("name","BitTorrent")+" · "+stream.optString("title",""));}
-                            String resolved=SmartPlayback.torrentUrl(stream,torrentServer);
-                            url=resolved; // Unresolved torrent URLs must not enter the HTTP decoder.
+                            continue; // Native candidates are appended after HTTP verification below.
                         }
                         if(!isHttpMediaCandidate(url)){
                             if(!stream.optString("infoHash","").isEmpty())torrents++;
@@ -1992,6 +1978,9 @@ public final class MainActivity extends Activity {
                     if(verifiedUrls.add(candidate.url))checked.available.add(candidate);
                 }
             }
+            for(int i=0;i<torrentLinks.size()&&checked.available.size()<24;i++){
+                checked.available.add(StreamProbe.candidate(torrentLinks.get(i),torrentLabels.get(i),null,null));
+            }
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
                 if(subtitle!=null)subtitle.setText("CATÁLOGOS • "+sources.size()+" FONTES");
@@ -1999,15 +1988,7 @@ public final class MainActivity extends Activity {
                     String detail=candidateCount>0
                         ?"Nenhuma das "+Math.min(candidateCount,24)+" URLs verificadas respondeu como mídia HTTP válida."
                         :"Nenhuma URL direta foi fornecida pelos addons ativos.";
-                    if(!torrentLinks.isEmpty()){
-                        new AlertDialog.Builder(this).setTitle("Fontes BitTorrent · motor externo")
-                            .setItems(torrentLabels.toArray(new String[0]),(dialog,index)->{
-                                try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(torrentLinks.get(index))));}
-                                catch(Exception e){message("Nenhum aplicativo BitTorrent compatível está instalado. Configure um servidor Stremio em Fontes > Reprodução e legendas.");}
-                            })
-                            .setNegativeButton("Voltar",null).show();return;
-                    }
-                    message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent exigem um motor compatível."
+                    message(detail+"\n\n"+skippedTorrents+" fontes BitTorrent não retornaram metadados utilizáveis."
                         +"\nLinks externos: "+skippedExternal+" • Outras entradas: "+skippedBad+
                         " • Addons que falharam: "+failedAddons+
                         "\n\nTente outra fonte ou outro título.");
@@ -2062,11 +2043,11 @@ public final class MainActivity extends Activity {
         input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
         LinearLayout box=new LinearLayout(this);box.setPadding(dp(23),0,dp(23),0);box.addView(input);
         new AlertDialog.Builder(this).setTitle("Reproduzir mídia autorizada")
-            .setMessage("Use um endereço direto de mídia MP4, HLS ou DASH.")
+            .setMessage("Use mídia MP4, HLS, DASH, magnet ou .torrent.")
             .setView(box).setNegativeButton("Cancelar",null)
             .setPositiveButton("Assistir",(d,w)->{
                 String url=input.getText().toString().trim();
-                if(!(url.startsWith("https://")||url.startsWith("http://"))){message("Use um endereço HTTP(S).");return;}
+                if(!SmartPlayback.http(url)&&!SmartPlayback.isTorrent(url)){message("Use HTTP(S), magnet ou .torrent.");return;}
                 Media direct=new Media();
                 direct.id=url;direct.type="direct";direct.name="Reprodução direta";
                 direct.episodeId="";direct.poster="";direct.description="Mídia adicionada diretamente";
@@ -2080,7 +2061,7 @@ public final class MainActivity extends Activity {
         play(url,m,videoId,restart,headerNames,headerValues,null);
     }
     private void play(String url,Media m,String videoId,boolean restart,String[] headerNames,String[] headerValues,String verifiedOptions){
-        if(url==null||!(url.startsWith("http://")||url.startsWith("https://"))){
+        if(!SmartPlayback.http(url)&&!SmartPlayback.isTorrent(url)){
             message("Esta fonte não tem um endereço de mídia reproduzível.");return;
         }
         if(m.type==null||m.type.isEmpty())m.type="movie";
@@ -2092,7 +2073,7 @@ public final class MainActivity extends Activity {
         intent.putExtra("url",url);intent.putExtra("title",m.name);
         intent.putExtra("id",m.id);intent.putExtra("type",m.type);
         intent.putExtra("videoId",videoId.isEmpty()?m.id:videoId);
-        intent.putExtra("subtitleAddons",sources.toArray(new String[0]));
+
         intent.putExtra("isLive",isChannel(m));
         intent.putExtra("poster",m.poster);intent.putExtra("description",m.description);
         intent.putExtra("source",m.source);intent.putExtra("episodeId",m.episodeId);

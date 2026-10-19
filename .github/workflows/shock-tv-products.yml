@@ -33,6 +33,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Generate synthetic torrent playback fixture
+        working-directory: .
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python3 shock-tv-hub/scripts/generate_playback_fixtures.py shock-tv-hub/test-fixtures
       - name: Compile Telares TV
         run: gradle --no-daemon :app:testTvDebugUnitTest :app:assembleTvDebug
       - name: Verify APK
@@ -50,7 +56,7 @@ jobs:
       - name: Publish Android TV preview
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc13-APK
+          name: Telares-TV-AndroidTV-v1.0.0-rc14-APK
           path: shock-tv-hub/android/app/build/outputs/apk/tv/debug/app-tv-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -80,7 +86,7 @@ jobs:
         if: env.SHOCK_RELEASE_READY == '1'
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-TV-AndroidTV-v1.0.0-rc13-SIGNED
+          name: Telares-TV-AndroidTV-v1.0.0-rc14-SIGNED
           path: shock-tv-hub/android/app/build/outputs/apk/tv/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -116,7 +122,7 @@ jobs:
       - name: Publish Telares Play Android phones and tablets
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-Play-Android-Mobile-v0.1.0-rc13-APK
+          name: Telares-Play-Android-Mobile-v0.1.0-rc14-APK
           path: shock-tv-hub/android/app/build/outputs/apk/mobile/debug/app-mobile-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -142,7 +148,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.SHOCK_MOBILE_RELEASE_READY == '1'
         with:
-          name: Telares-Play-Android-Mobile-v0.1.0-rc13-SIGNED
+          name: Telares-Play-Android-Mobile-v0.1.0-rc14-SIGNED
           path: shock-tv-hub/android/app/build/outputs/apk/mobile/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -165,7 +171,7 @@ jobs:
       - name: Publish Samsung Orsay widget builds
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-Install-Samsung-Orsay-Widget-RC13
+          name: Telares-Install-Samsung-Orsay-Widget-RC14
           path: legacy-tv-hub/app/src/main/assets/LegacyTVHub_0.1.3.zip
           if-no-files-found: error
           retention-days: 30
@@ -179,7 +185,7 @@ jobs:
       - name: Publish portable Windows executable
         uses: actions/upload-artifact@v4
         with:
-          name: Telares-Install-Windows-x64-EXE-RC13
+          name: Telares-Install-Windows-x64-EXE-RC14
           path: dist/TelaresInstall.exe
           if-no-files-found: error
           retention-days: 30
@@ -209,7 +215,7 @@ jobs:
           test -s legacy-tv-hub/app/src/main/assets/LegacyTVHub_0.1.3.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Install-Android-Helper-RC13-APK
+          name: Telares-Install-Android-Helper-RC14-APK
           path: legacy-tv-hub/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
@@ -238,8 +244,48 @@ jobs:
           if (!(Test-Path dist/TelaresInstall-x86.exe)) { throw "32-bit EXE missing" }
       - uses: actions/upload-artifact@v4
         with:
-          name: Telares-Install-Windows-x86-32bit-EXE-RC13
+          name: Telares-Install-Windows-x86-32bit-EXE-RC14
           path: dist/TelaresInstall-x86.exe
           if-no-files-found: error
           retention-days: 30
 
+
+  android-playback:
+    name: Real Media3 playback on Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Generate synthetic test assets
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python3 shock-tv-hub/scripts/generate_playback_fixtures.py shock-tv-hub/android/app/src/androidTest/assets
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: true
+          working-directory: shock-tv-hub/android
+          script: gradle --no-daemon :app:connectedTvDebugAndroidTest
+      - name: Store Android playback reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telares-RC14-Android-Playback-Reports
+          path: shock-tv-hub/android/app/build/reports/androidTests
+          if-no-files-found: warn

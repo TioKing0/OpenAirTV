@@ -6,8 +6,9 @@ android {
     applicationId 'br.com.shocktv'
     minSdk 23
     targetSdk 34
-    versionCode 22
-    versionName '1.0.0-rc13'
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    versionCode 23
+    versionName '1.0.0-rc14'
   }
   flavorDimensions 'device'
   productFlavors {
@@ -18,7 +19,7 @@ android {
     mobile {
       dimension 'device'
       applicationId 'br.com.telares.play'
-      versionName '0.1.0-rc13'
+      versionName '0.1.0-rc14'
       buildConfigField 'boolean', 'MOBILE_UI', 'true'
     }
   }
@@ -42,6 +43,17 @@ android {
   compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies {
+  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+  androidTestImplementation 'androidx.test:runner:1.6.2'
+  androidTestImplementation 'androidx.test:core:1.6.1'
+
+  implementation 'org.libtorrent4j:libtorrent4j:2.1.0-39'
+  runtimeOnly 'org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39'
+  runtimeOnly 'org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39'
+  runtimeOnly 'org.libtorrent4j:libtorrent4j-android-x86:2.1.0-39'
+  runtimeOnly 'org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39'
+  testRuntimeOnly 'org.libtorrent4j:libtorrent4j-linux:2.1.0-39'
+
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'org.json:json:20240303'
   implementation 'androidx.media3:media3-exoplayer:1.5.1'
@@ -52,3 +64,14 @@ dependencies {
 
 apply from: 'branding.gradle'
 
+
+tasks.withType(Test).configureEach {
+  systemProperty 'telares.fixture', rootProject.file('../test-fixtures').absolutePath
+  systemProperty 'java.library.path', "${buildDir}/test-native"
+  doFirst {
+    def nativeJar = configurations.testTvDebugRuntimeClasspath.files.find { it.name.startsWith('libtorrent4j-linux-') }
+    if (nativeJar != null) {
+      copy { from zipTree(nativeJar); include '**/libtorrent4j.so'; into "${buildDir}/test-native"; eachFile { path = name }; includeEmptyDirs = false }
+    }
+  }
+}

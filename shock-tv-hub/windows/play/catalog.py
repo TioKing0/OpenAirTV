@@ -15,7 +15,6 @@ DEFAULT = [
  "https://plaviohd.edon.workers.dev/manifest.json",
  "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
  "https://h-gate.site/dc/manifest.json",
- "https://opensubtitlesv3-pro.dexter21767.com/manifest.json",
 ]
 def get_json(url):
     req=request.Request(url,headers={"User-Agent":"TelaresPlay/0.1","Accept":"application/json"})
@@ -190,46 +189,21 @@ def score(x):
     q=40 if "1080" in text else 30 if "720" in text else 20 if "2160" in text or "4k" in text else 0
     return q+(30 if any(t in text for t in ("dublado","pt-br","portugu")) else 0)
 
-def torrent_link(stream,server=""):
-    link=stream.get("url","")
-    info=str(stream.get("infoHash","")).lower()
-    if not re.fullmatch("[a-f0-9]{40}",info):
-        found=re.search(r"[?&]xt=urn:btih:([a-fA-F0-9]{40})(?:&|$)",link) if isinstance(link,str) else None
-        info=found.group(1).lower() if found else ""
-    if not info:
-        return (link,True) if isinstance(link,str) and urlparse.urlsplit(link).path.lower().endswith(".torrent") else ("",False)
+def removed_addon(url):
+    return "opensubtitles" in (urlparse.urlsplit(url).hostname or "").lower()
+
+def torrent_link(stream):
+    link=stream.get("url","");info=str(stream.get("infoHash","")).lower()
+    if isinstance(link,str) and (link.startswith("magnet:?") or urlparse.urlsplit(link).path.lower().endswith(".torrent")):return link
+    if not re.fullmatch("[a-f0-9]{40}",info):return ""
+    magnet="magnet:?xt=urn:btih:"+info
     index=stream.get("fileIdx")
-    p=urlparse.urlsplit(server)
-    if p.scheme in ("http","https") and p.hostname and not p.username and isinstance(index,int) and not isinstance(index,bool) and index>=0:
-        return server.rstrip("/")+"/"+info+"/"+str(index),False
-    magnet=link if isinstance(link,str) and link.startswith("magnet:?") else "magnet:?xt=urn:btih:"+info
-    if isinstance(index,int) and index>=0 and "so=" not in magnet:magnet+="&so="+str(index)
-    for source in stream.get("sources",[])[:12]:
-        if isinstance(source,str) and source.startswith("tracker:"):magnet+="&tr="+urlparse.quote(source[8:],safe="")
-    return magnet,True
+    if isinstance(index,int) and not isinstance(index,bool) and index>=0:magnet+="&so="+str(index)
+    for tracker in stream.get("sources",[])[:12]:
+        if isinstance(tracker,str) and tracker.startswith("tracker:"):magnet+="&tr="+urlparse.quote(tracker[8:],safe="")
+    return magnet
 
-def subtitle_rank(lang):
-    value=str(lang).lower().replace("_","-")
-    return 0 if value in ("pob","pt-br","por-br") else 1 if value in ("por","pt","pt-pt") else 2
-
-def subtitles(addons,item):
-    typ=item.get("type","movie");ident=item.get("_episode") or item.get("id","")
-    tracks=[];needs_config=False
-    def query(u):
-        m=manifest(u)
-        if not supports(m,"subtitles",typ,ident):return [],False
-        if (m.get("behaviorHints") or {}).get("configurationRequired"):return [],True
-        result=get_json(base(u)+"subtitles/"+enc(typ)+"/"+enc(ident)+".json").get("subtitles",[])
-        return [x for x in result[:100] if isinstance(x,dict) and urlparse.urlsplit(str(x.get("url",""))).scheme in ("http","https")],False
-    with futures.ThreadPoolExecutor(max_workers=5) as pool:
-        for f in futures.as_completed([pool.submit(query,u) for u in addons[:20]]):
-            try:
-                rows,config=f.result();tracks.extend(rows);needs_config=needs_config or config
-            except Exception:pass
-    tracks.sort(key=lambda x:subtitle_rank(x.get("lang","")))
-    return tracks[:100],needs_config
-
-def streams(addons,item,torrent_server=""):
+def streams(addons,item):
     typ=item.get("type","movie");ident=item.get("_episode") or item.get("id","")
     out=[]
     for u in addons[:20]:
@@ -240,12 +214,13 @@ def streams(addons,item,torrent_server=""):
             for x in data.get("streams",[])[:60]:
                 if not isinstance(x,dict):continue
                 link=x.get("url","")
-                routed,external=torrent_link(x,torrent_server)
+                routed=torrent_link(x)
+                native=bool(routed)
                 if routed:link=routed
-                if not isinstance(link,str) or (not external and urlparse.urlsplit(link).scheme not in ("http","https")):continue
+                if not isinstance(link,str) or (not native and urlparse.urlsplit(link).scheme not in ("http","https")):continue
                 if (x.get("behaviorHints") or {}).get("proxyHeaders"):continue
                 label=" ".join(str(t) for t in (m.get("name",""),x.get("name",""),x.get("title","")))
-                out.append(dict(item,_url=link,_label=label,_external=external))
+                out.append(dict(item,_url=link,_label=label,_torrent=native,_file_index=x.get("fileIdx")))
                 if len(out)>=64:break
         except Exception:continue
     used=set();good=[]
@@ -255,7 +230,7 @@ def streams(addons,item,torrent_server=""):
 
 def probe(item):
     link=item["_url"]
-    if item.get("_external"):return None
+    if item.get("_torrent"):return None
     headers={"Accept-Encoding":"identity","User-Agent":"TelaresPlay/RC13"}
     if not urlparse.urlsplit(link).path.lower().endswith((".m3u8",".mpd")):headers["Range"]="bytes=0-2047"
     req=request.Request(link,headers=headers)

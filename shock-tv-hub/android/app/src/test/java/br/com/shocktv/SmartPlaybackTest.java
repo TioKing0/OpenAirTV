@@ -5,12 +5,10 @@ import org.json.JSONObject;
 public class SmartPlaybackTest {
     @Test public void torrentRequiresEngineAndExplicitFile()throws Exception{
         JSONObject s=new JSONObject().put("infoHash","0123456789abcdef0123456789abcdef01234567");
-        assertEquals("",SmartPlayback.torrentUrl(s,"http://127.0.0.1:11470"));
+        assertTrue(SmartPlayback.isTorrent(SmartPlayback.magnet(s)));
         s.put("fileIdx",3);
-        assertEquals("http://127.0.0.1:11470/0123456789abcdef0123456789abcdef01234567/3",SmartPlayback.torrentUrl(s,"http://127.0.0.1:11470/"));
-        assertEquals("",SmartPlayback.torrentUrl(s,""));
         assertTrue(SmartPlayback.magnet(s).contains("&so=3"));
-        assertEquals("",SmartPlayback.torrentUrl(s,"http://user:password@server"));
+        assertTrue(SmartPlayback.removedAddon("https://opensubtitlesv3-pro.dexter21767.com/secret/manifest.json"));
     }
     @Test public void magnetNeverBecomesHttp(){
         assertFalse(SmartPlayback.http("magnet:?xt=urn:btih:abcdef"));
