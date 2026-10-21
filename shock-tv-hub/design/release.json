@@ -1,7 +1,7 @@
 {
   "brand": "TELARES",
   "batch": "telares-hls-headers-rc15",
-  "revision": 2,
+  "revision": 3,
   "date": "2026-10-20",
   "feature": "Forward addon public headers for live HLS; Stravo II and AIOStreams registered",
   "streamingTargets": [

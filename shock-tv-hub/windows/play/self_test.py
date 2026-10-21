@@ -43,6 +43,7 @@ def run(directory):
         video=VideoEngine(0,lambda event:None)
         results=[]
         for source in (url,f'http://127.0.0.1:{server.server_port}/sample.m3u8',f'http://127.0.0.1:{server.server_port}/sample.mpd',f'http://127.0.0.1:{server.server_port}/protected/sample.m3u8'):
+            print('Playback test: '+('torrent' if source==url else source.rsplit('/',1)[-1])+' headers='+str('/protected/' in source),flush=True)
             headers={"User-Agent":"Telares-Fixture","Referer":"https://fixture.invalid/","Origin":"https://fixture.invalid"} if "/protected/" in source else None
             video.play(source,headers);deadline=time.monotonic()+25;decoded=False
             while time.monotonic()<deadline:
@@ -57,7 +58,11 @@ def run(directory):
             assert 2.5<=video.position()<=3.5,'Seek failed: '+('torrent' if source==url else source.rsplit('/',1)[-1])
             video.player.set_pause(0)
             results.append({'protocol':'hls-headers' if '/protected/' in source else 'torrent' if source==url else 'hls' if 'm3u8' in source else 'dash','decoded_video':True,'seek':True})
-        print(json.dumps({'native_version':engine.lt.version,'sha256':hashlib.sha256(original).hexdigest(),'range_reads':'passed','playback':results}))
+        print(json.dumps({'native_version':engine.lt.version,'sha256':hashlib.sha256(original).hexdigest(),'range_reads':'passed','playback':results}),flush=True)
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        raise
     finally:
         if video:video.close()
         cache=engine.root;engine.close();server.shutdown();server.server_close()
