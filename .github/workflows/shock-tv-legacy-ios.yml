@@ -13,6 +13,21 @@ permissions:
   contents: read
 
 jobs:
+  native-header-transport:
+    name: Native Foundation HLS header transport
+    runs-on: macos-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and test the actual Objective-C relay
+        run: |
+          set -euo pipefail
+          clang -fobjc-arc -framework Foundation -I shock-tv-hub/ios shock-tv-hub/ios/TelaresHeaderRelay.m shock-tv-hub/ios/tests/HeaderRelayTest.m -o /tmp/telares-header-test
+          python3 shock-tv-hub/ios/tests/header_origin.py /tmp/telares-origin-port &
+          origin_pid=$!
+          trap 'kill "$origin_pid"' EXIT
+          for attempt in {1..50}; do test -f /tmp/telares-origin-port && break; sleep 0.1; done
+          /tmp/telares-header-test "$(cat /tmp/telares-origin-port)"
   source:
     name: Complete editable source ZIP
     runs-on: ubuntu-latest
