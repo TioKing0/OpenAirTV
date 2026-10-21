@@ -1,17 +1,17 @@
-name: Telares RC14 verified publication
+name: Telares RC15 verified publication
 on:
   push:
     branches: [telares-release-candidate]
     paths:
       - shock-tv-hub/design/release.json
-      - shock-tv-hub/scripts/publish_rc14.py
-      - .github/workflows/telares-rc14-release.yml
+      - shock-tv-hub/scripts/publish_rc15.py
+      - .github/workflows/telares-rc15-release.yml
   workflow_dispatch:
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: telares-rc14-${{ github.sha }}
+  group: telares-rc15-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   publish:
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify and publish exact-commit RC14 artifacts
+      - name: Verify and publish exact-commit RC15 artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python shock-tv-hub/scripts/publish_rc14.py
+        run: python shock-tv-hub/scripts/publish_rc15.py

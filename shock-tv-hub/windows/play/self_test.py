@@ -8,6 +8,9 @@ def run(directory):
         def __init__(self,*args,**kwargs):super().__init__(*args,directory=str(root),**kwargs)
         def log_message(self,*args):pass
         def do_GET(self):
+            if self.path.startswith('/protected/'):
+                if any(self.headers.get(k)!=v for k,v in {"User-Agent":"Telares-Fixture","Referer":"https://fixture.invalid/","Origin":"https://fixture.invalid"}.items()):self.send_error(403);return
+                self.path=self.path[len("/protected"):]
             if self.path=='/sample.torrent':
                 url=f'http://127.0.0.1:{self.server.server_port}/'.encode()
                 torrent=b'd4:info'+(root/'info.bin').read_bytes()+b'8:url-list'+str(len(url)).encode()+b':'+url+b'e'
@@ -39,8 +42,9 @@ def run(directory):
         os.environ['TELARES_SELF_TEST']='1'
         video=VideoEngine(0,lambda event:None)
         results=[]
-        for source in (url,f'http://127.0.0.1:{server.server_port}/sample.m3u8',f'http://127.0.0.1:{server.server_port}/sample.mpd'):
-            video.play(source);deadline=time.monotonic()+25;decoded=False
+        for source in (url,f'http://127.0.0.1:{server.server_port}/sample.m3u8',f'http://127.0.0.1:{server.server_port}/sample.mpd',f'http://127.0.0.1:{server.server_port}/protected/sample.m3u8'):
+            headers={"User-Agent":"Telares-Fixture","Referer":"https://fixture.invalid/","Origin":"https://fixture.invalid"} if "/protected/" in source else None
+            video.play(source,headers);deadline=time.monotonic()+25;decoded=False
             while time.monotonic()<deadline:
                 import vlc
                 stats=vlc.MediaStats()
@@ -52,7 +56,7 @@ def run(directory):
             while time.monotonic()<seek_deadline and video.position()<2:time.sleep(.1)
             assert 2.5<=video.position()<=3.5,'Seek failed: '+('torrent' if source==url else source.rsplit('/',1)[-1])
             video.player.set_pause(0)
-            results.append({'protocol':'torrent' if source==url else 'hls' if 'm3u8' in source else 'dash','decoded_video':True,'seek':True})
+            results.append({'protocol':'hls-headers' if '/protected/' in source else 'torrent' if source==url else 'hls' if 'm3u8' in source else 'dash','decoded_video':True,'seek':True})
         print(json.dumps({'native_version':engine.lt.version,'sha256':hashlib.sha256(original).hexdigest(),'range_reads':'passed','playback':results}))
     finally:
         if video:video.close()

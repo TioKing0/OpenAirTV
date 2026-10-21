@@ -1,6 +1,7 @@
 #import "ShockViewController.h"
 #import "ShockDetailViewController.h"
 #import "ShockStreamChecker.h"
+#import "TelaresHeaderRelay.h"
 #import <ImageIO/ImageIO.h>
 #import <math.h>
 
@@ -102,6 +103,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 @property(nonatomic,strong) NSArray *episodeSeasonOptions;
 @property(nonatomic,strong) NSNumber *selectedEpisodeSeason;
 @property(nonatomic,strong) AVPlayer *moviePlayer;
+@property(nonatomic,strong) TelaresHeaderRelay *headerRelay;
 @property(nonatomic,strong) AVPlayerViewController *playerController;
 @property(nonatomic,strong) id timeObserver;
 @property(nonatomic,strong) NSMutableDictionary *activePlayback;
@@ -145,7 +147,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
 - (UIColor *)dark { return [UIColor colorWithRed:0.037 green:0.071 blue:0.12 alpha:1]; }
 - (UIColor *)accent { return [UIColor colorWithRed:0.39 green:0.84 blue:0.91 alpha:1]; }
 - (NSArray *)defaultSources {
-    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate,kDefaultIPTV,kDefaultPlavio,kDefaultTvvio,kDefaultDC];
+    return @[kDefaultCinemeta,kDefaultFenix,kDefaultNetflix,kDefaultTorrentio,kDefaultPirate,kDefaultIPTV,kDefaultPlavio,kDefaultTvvio,kDefaultDC,@"https://v2.stravo.site/local/manifest.json",@"https://aiostreams.elfhosted.com/stremio/manifest.json"];
 }
 - (NSString *)str:(id)value {
     return [value isKindOfClass:[NSString class]] ? value : @"";
@@ -1386,9 +1388,10 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                     [self str:manifest[@"name"]],[self str:stream[@"name"]]];
                 NSString *description=[self str:stream[@"title"]];
                 data[@"_label"]=[label stringByAppendingFormat:@" %@",description];
-                // The legacy AVPlayer cannot inject private addon headers.
+                // Public addon headers are forwarded by a private, in-app HLS transport.
                 NSDictionary *headers=[self dict:[self dict:[self dict:stream[@"behaviorHints"]][@"proxyHeaders"]][@"request"]];
-                if(headers.count)continue;
+                if(headers[@"Authorization"]||headers[@"Cookie"]||headers[@"authorization"]||headers[@"cookie"])continue;
+                data[@"_headers"]=[TelaresHeaderRelay publicHeaders:headers];
                 [found addObject:data];
                 if(found.count>=28)break;
             }
@@ -1516,6 +1519,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     if(self.playerController)self.playerController.player=nil;
     if(self.liveFullscreenController)self.liveFullscreenController.player=nil;
     self.moviePlayer=nil;
+    [self.headerRelay close];self.headerRelay=nil;
     self.playbackStarted=NO;
 }
 - (void)playStream:(NSDictionary *)item {
@@ -1533,6 +1537,13 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
                 self.seekAfterReady=[entry[@"position"] doubleValue];break;
             }
         }
+    }
+    NSDictionary *headers=[TelaresHeaderRelay publicHeaders:[self dict:item[@"_headers"]]];
+    if(headers.count){
+        NSError *relayError=nil;
+        self.headerRelay=[[TelaresHeaderRelay alloc]initWithHeaders:headers error:&relayError];
+        NSURL *local=[self.headerRelay localURL:url];
+        if(!local){[self tryNextPlaybackSource];return;}url=local;
     }
     AVPlayerItem *playerItem=[AVPlayerItem playerItemWithURL:url];
     self.observedPlayerItem=playerItem;
@@ -1742,6 +1753,8 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
         cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:7];
     // Some HLS CDNs reject Range on the playlist while accepting ordinary GET.
     request.HTTPMethod=@"GET";
+    NSDictionary *publicHeaders=[TelaresHeaderRelay publicHeaders:[self dict:source[@"_headers"]]];
+    for(NSString *name in publicHeaders)[request setValue:publicHeaders[name] forHTTPHeaderField:name];
     [request setValue:@"application/vnd.apple.mpegurl, application/x-mpegURL, */*"
         forHTTPHeaderField:@"Accept"];
     NSURLSessionConfiguration *config=[NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -1903,6 +1916,7 @@ static NSString * const kDefaultDC = @"https://h-gate.site/dc/manifest.json";
     // Sensitive streaming URLs and auth tokens are not persisted in the user library.
     [item removeObjectForKey:@"_url"];
     [item removeObjectForKey:@"_label"];
+    [item removeObjectForKey:@"_headers"];
     [all insertObject:item atIndex:0];
     while(all.count>150)[all removeLastObject];
     [[NSUserDefaults standardUserDefaults] setObject:all forKey:@"shock_items_v1"];

@@ -1,4 +1,5 @@
 """Stremio protocol adapters: real catalogs, metadata, and direct stream links."""
+from header_relay import public_headers
 import concurrent.futures as futures
 import json
 import re
@@ -15,6 +16,8 @@ DEFAULT = [
  "https://plaviohd.edon.workers.dev/manifest.json",
  "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
  "https://h-gate.site/dc/manifest.json",
+ "https://v2.stravo.site/local/manifest.json",
+ "https://aiostreams.elfhosted.com/stremio/manifest.json",
 ]
 def get_json(url):
     req=request.Request(url,headers={"User-Agent":"TelaresPlay/0.1","Accept":"application/json"})
@@ -218,9 +221,11 @@ def streams(addons,item):
                 native=bool(routed)
                 if routed:link=routed
                 if not isinstance(link,str) or (not native and urlparse.urlsplit(link).scheme not in ("http","https")):continue
-                if (x.get("behaviorHints") or {}).get("proxyHeaders"):continue
+                requested=((x.get("behaviorHints") or {}).get("proxyHeaders") or {}).get("request") or {}
+                if any(k.lower() in ("authorization","cookie") for k in requested):continue
+                headers=public_headers(requested)
                 label=" ".join(str(t) for t in (m.get("name",""),x.get("name",""),x.get("title","")))
-                out.append(dict(item,_url=link,_label=label,_torrent=native,_file_index=x.get("fileIdx")))
+                out.append(dict(item,_url=link,_label=label,_torrent=native,_file_index=x.get("fileIdx"),_headers=headers))
                 if len(out)>=64:break
         except Exception:continue
     used=set();good=[]

@@ -5,7 +5,7 @@ INSTALL_TARGET_PROCESSES = SpringBoard
 include $(THEOS)/makefiles/common.mk
 
 APPLICATION_NAME = ShockTV
-ShockTV_FILES = main.m AppDelegate.m ShockViewController.m ShockDetailViewController.m ShockStreamChecker.m
+ShockTV_FILES = main.m AppDelegate.m ShockViewController.m ShockDetailViewController.m ShockStreamChecker.m TelaresHeaderRelay.m
 ShockTV_FRAMEWORKS = UIKit Foundation AVFoundation AVKit CoreMedia ImageIO
 ShockTV_CFLAGS = -fobjc-arc -O2
 ShockTV_RESOURCE_DIRS = Resources

@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class PlaybackSmokeTest {
  private static final class Origin implements AutoCloseable {
   final Context context=InstrumentationRegistry.getInstrumentation().getContext();
-  final ServerSocket socket;volatile boolean closed;final ExecutorService clients=Executors.newCachedThreadPool();
+  final ServerSocket socket;volatile boolean closed;volatile boolean requireHeaders;final ExecutorService clients=Executors.newCachedThreadPool();
   Origin()throws Exception{
    socket=new ServerSocket(0,5,InetAddress.getByName("127.0.0.1"));
    new Thread(()->{while(!closed)try{Socket s=socket.accept();clients.execute(()->serve(s));}catch(Exception e){break;}},"Fixture-origin").start();
@@ -26,7 +26,14 @@ public class PlaybackSmokeTest {
   void serve(Socket s){try(Socket client=s){
    client.setSoTimeout(5000);BufferedReader in=new BufferedReader(new InputStreamReader(client.getInputStream(),"US-ASCII"));String request=in.readLine();if(request==null)return;
    String name=request.split(" ")[1].substring(1);if(name.contains("..")||name.contains("/"))return;
-   String range=null;for(String line;(line=in.readLine())!=null&&!line.isEmpty();)if(line.toLowerCase().startsWith("range:"))range=line.substring(6).trim();
+   java.util.Map<String,String> received=new java.util.HashMap<>();
+   String range=null;for(String line;(line=in.readLine())!=null&&!line.isEmpty();){
+    int colon=line.indexOf(':');if(colon>0)received.put(line.substring(0,colon).toLowerCase(),line.substring(colon+1).trim());
+    if(line.toLowerCase().startsWith("range:"))range=line.substring(6).trim();
+   }
+   if(requireHeaders&&!("Telares-Fixture".equals(received.get("user-agent"))&&"https://fixture.invalid/".equals(received.get("referer"))&&"https://fixture.invalid".equals(received.get("origin")))){
+    client.getOutputStream().write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes("US-ASCII"));return;
+   }
    byte[] data;
    if(name.equals("sample.torrent")){
     String seed=url("");ByteArrayOutputStream out=new ByteArrayOutputStream();out.write("d4:info".getBytes("UTF-8"));out.write(asset("info.bin"));out.write(("8:url-list"+seed.length()+":"+seed+"e").getBytes("UTF-8"));data=out.toByteArray();
@@ -40,9 +47,11 @@ public class PlaybackSmokeTest {
  }
  @Test public void decodeAndSeekWithoutSetup()throws Exception{
   try(Origin origin=new Origin()){
-   for(String path:new String[]{"sample.mp4","sample.m3u8","sample.mpd","sample.torrent"}){
+   for(String path:new String[]{"sample.mp4","sample.m3u8","sample.mpd","sample.torrent","protected.m3u8"}){
     Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();Intent intent=new Intent(target,PlayerActivity.class);
-    intent.putExtra("localFixture",true);intent.putExtra("url",origin.url(path));intent.putExtra("libraryKey","test|"+path);intent.putExtra("type","direct");intent.putExtra("title","Synthetic playback test");
+    origin.requireHeaders=path.equals("protected.m3u8");
+    if(origin.requireHeaders){intent.putExtra("streamHeaderNames",new String[]{"User-Agent","Referer","Origin"});intent.putExtra("streamHeaderValues",new String[]{"Telares-Fixture","https://fixture.invalid/","https://fixture.invalid"});}
+    intent.putExtra("localFixture",true);intent.putExtra("url",origin.url(origin.requireHeaders?"sample.m3u8":path));intent.putExtra("libraryKey","test|"+path);intent.putExtra("type","direct");intent.putExtra("title","Synthetic playback test");
     try(ActivityScenario<PlayerActivity> scenario=ActivityScenario.launch(intent)){
      AtomicBoolean decoded=new AtomicBoolean();long deadline=System.currentTimeMillis()+60000;
      while(System.currentTimeMillis()<deadline&&!decoded.get()){

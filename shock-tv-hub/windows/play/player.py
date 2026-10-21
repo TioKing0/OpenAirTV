@@ -27,6 +27,7 @@ class VideoEngine:
         self.instance=self.vlc.Instance(*options)
         self.player=self.instance.media_player_new()
         self.player.set_hwnd(hwnd)
+        self.relay=None
         self.torrent=None
         self.subtitle_files=[]
         self.hooks=[]
@@ -35,8 +36,12 @@ class VideoEngine:
             def handler(evt,kind=name):callback(kind)
             self.hooks.append(handler)
             events.event_attach(getattr(self.vlc.EventType,attr),handler)
-    def play(self,url):
+    def play(self,url,headers=None):
+        if self.relay:self.relay.close();self.relay=None
         self.player.stop()
+        if headers:
+            from header_relay import HeaderRelay
+            self.relay=HeaderRelay(headers);url=self.relay.url(url)
         self.player.set_media(self.instance.media_new(url))
         self.player.play()
     def subtitle(self,path):
@@ -53,6 +58,7 @@ class VideoEngine:
     def is_playing(self):return bool(self.player.is_playing())
     def resume(self,seconds):self.player.set_time(int(max(0,seconds)*1000))
     def close(self):
+        if self.relay:self.relay.close();self.relay=None
         if self.torrent:self.torrent.close();self.torrent=None
         try:self.player.stop();self.player.release();self.instance.release()
         except Exception:pass

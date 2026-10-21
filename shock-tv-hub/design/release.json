@@ -1,37 +1,37 @@
 {
   "brand": "TELARES",
-  "batch": "telares-integrated-playback-rc14",
-  "revision": 8,
-  "date": "2026-10-19",
-  "feature": "OpenSubtitles and manual service setup removed; embedded BitTorrent Android/Windows; verified playback and seek tests with generated H264/AAC, HLS and DASH media",
+  "batch": "telares-hls-headers-rc15",
+  "revision": 1,
+  "date": "2026-10-20",
+  "feature": "Forward addon public headers for live HLS; Stravo II and AIOStreams registered",
   "streamingTargets": [
     {
       "platform": "android-tv",
       "name": "Telares TV",
-      "version": "1.0.0-rc14",
+      "version": "1.0.0-rc15",
       "applicationId": "br.com.shocktv"
     },
     {
       "platform": "ios-ipad-legacy",
       "name": "Telares Play",
-      "version": "0.3.12",
+      "version": "0.3.13",
       "applicationId": "br.com.shocktv.legacy",
       "armv7": true
     },
     {
       "platform": "windows-play-x86",
       "name": "Telares Play",
-      "version": "0.2.11"
+      "version": "0.2.12"
     },
     {
       "platform": "windows-play-x64",
       "name": "Telares Play",
-      "version": "0.2.11"
+      "version": "0.2.12"
     },
     {
       "platform": "android-mobile",
       "name": "Telares Play",
-      "version": "0.1.0-rc14",
+      "version": "0.1.1-rc15",
       "applicationId": "br.com.telares.play",
       "minSdk": 23,
       "architectures": [
@@ -122,7 +122,9 @@
     "https://catalogo-iptv-production.up.railway.app/manifest.json",
     "https://plaviohd.edon.workers.dev/manifest.json",
     "https://c69e439124f3-tvvio.baby-beamup.club/manifest.json",
-    "https://h-gate.site/dc/manifest.json"
+    "https://h-gate.site/dc/manifest.json",
+    "https://v2.stravo.site/local/manifest.json",
+    "https://aiostreams.elfhosted.com/stremio/manifest.json"
   ],
   "liveTv": {
     "protocolTypes": [
@@ -179,5 +181,9 @@
     "torrentEngine": "Native libtorrent4j 2.1.0-39 for Android four ABIs; libtorrent 2.0.11 for Windows x86/x64. Tokenized loopback HTTP, verified pieces, bounded cache, no separate daemon/account/setup. iOS 9 keeps HTTP/HLS only.",
     "subtitles": "OpenSubtitles removed. Embedded media tracks remain available; no service account required.",
     "validation": "Native engine byte/range tests, VLC decoding and seek on both architectures including packaged executables, Media3 rendered video and seek on Android emulator. Physical devices remain unverified."
+  },
+  "addonStatus": {
+    "Stravo II": "Manifest responds; catalog/meta/stream/subtitles declared; provider availability varies",
+    "AIOStreams": "Generic manifest configurationRequired=true; no resources/catalogs/types. Registered but no playback without a configured manifest."
   }
 }

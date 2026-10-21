@@ -63,16 +63,19 @@ public final class MainActivity extends Activity {
     private static final String PLAVIO="https://plaviohd.edon.workers.dev/manifest.json";
     private static final String TVVIO="https://c69e439124f3-tvvio.baby-beamup.club/manifest.json";
     private static final String DC_UNIVERSE="https://h-gate.site/dc/manifest.json";
+    private static final String STRAVO="https://v2.stravo.site/local/manifest.json";
+    private static final String AIOSTREAMS="https://aiostreams.elfhosted.com/stremio/manifest.json";
     private static final String[] BUNDLED_ADDONS={
         CINEMETA,FENIXFLIX,TORRENTIO,NETFLIX_CATALOG,PIRATEBAY_PLUS,
-        IPTV,PLAVIO,TVVIO,DC_UNIVERSE
+        IPTV,PLAVIO,TVVIO,DC_UNIVERSE,STRAVO,AIOSTREAMS
     };
     private static final String[] BUNDLED_NAMES={
         "Cinemeta • Metadados","FenixFlix • Addon comunitário",
         "Torrentio • Busca de streams","Netflix Catalog • Metadados",
         "ThePirateBay+ • Busca de streams",
         "Catálogo IPTV • canais ao vivo","PlavioHD • Addon comunitário",
-        "Tvvio • canais ao vivo","DC Universe • Catálogo temático"
+        "Tvvio • canais ao vivo","DC Universe • Catálogo temático",
+        "Stravo II • Catálogos e streams","AIOStreams • manifesto genérico sem fontes"
     };
     private final ExecutorService pool=Executors.newFixedThreadPool(5);
     private final ExecutorService searchExecutor=Executors.newSingleThreadExecutor();
@@ -87,6 +90,7 @@ public final class MainActivity extends Activity {
     private String livePreviewKey="";
     private int livePreviewGeneration=0, livePreviewOptionIndex=0;
     private final ArrayList<String> livePreviewUrls=new ArrayList<>();
+    private final ArrayList<java.util.Map<String,String>> livePreviewHeaders=new ArrayList<>();
     private final ArrayList<Media> categoryResults=new ArrayList<>();
     private TextView categoryStatus;
     private final ArrayList<String> sources=new ArrayList<>();
@@ -753,7 +757,7 @@ public final class MainActivity extends Activity {
         livePreviewView=null;
         livePreviewStatus=null;
         livePreviewKey="";
-        livePreviewUrls.clear();
+        livePreviewUrls.clear();livePreviewHeaders.clear();
     }
     private void showInlineSource(int request,int next){
         if(request!=livePreviewGeneration||livePreviewPlayer==null)return;
@@ -770,7 +774,12 @@ public final class MainActivity extends Activity {
                 .setUri(android.net.Uri.parse(address));
             String low=address.toLowerCase(Locale.ROOT);
             if(low.contains(".m3u8"))builder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8);
-            livePreviewPlayer.setMediaItem(builder.build());
+            java.util.Map<String,String> headers=livePreviewHeaders.get(next);
+            androidx.media3.datasource.DefaultHttpDataSource.Factory http=new androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent("Telares/RC15").setDefaultRequestProperties(headers).setConnectTimeoutMs(6000).setReadTimeoutMs(12000);
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory factory=new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                new androidx.media3.datasource.DefaultDataSource.Factory(this,http));
+            livePreviewPlayer.setMediaSource(factory.createMediaSource(builder.build()));
             livePreviewPlayer.prepare();
             livePreviewPlayer.play();
             if(livePreviewStatus!=null)
@@ -798,6 +807,7 @@ public final class MainActivity extends Activity {
         ArrayList<String> candidates=new ArrayList<>(sources);
         pool.execute(()->{
             ArrayList<String> urls=new ArrayList<>();
+            ArrayList<java.util.Map<String,String>> requestHeaders=new ArrayList<>();
             Set<String> seen=new HashSet<>();
             // Prioritize the originating addon. Do not mistake a successful HTTP probe
             // for confirmed playable video.
@@ -816,8 +826,14 @@ public final class MainActivity extends Activity {
                         String url=entry.optString("url","");
                         if(!isHttpMediaCandidate(url)||!seen.add(url))continue;
                         JSONObject hints=entry.optJSONObject("behaviorHints");
-                        if(hints!=null&&hints.optJSONObject("proxyHeaders")!=null)continue;
-                        urls.add(url);
+                        JSONObject proxy=hints==null?null:hints.optJSONObject("proxyHeaders");
+                        JSONObject requested=proxy==null?null:proxy.optJSONObject("request");
+                        java.util.Map<String,String> safe=new java.util.HashMap<>();
+                        if(requested!=null)for(String header:new String[]{"User-Agent","Referer","Origin","Accept"}){
+                            String value=requested.optString(header,"");
+                            if(!value.isEmpty()&&value.length()<=2048&&value.indexOf(13)<0&&value.indexOf(10)<0)safe.put(header,value);
+                        }
+                        urls.add(url);requestHeaders.add(safe);
                     }
                     // Start promptly when the channel's own addon exposes candidates,
                     // rather than waiting for every unrelated addon to time out.
@@ -832,7 +848,7 @@ public final class MainActivity extends Activity {
                         "O addon não forneceu sinal HTTP/HLS direto para prévia.");
                     return;
                 }
-                livePreviewUrls.addAll(urls);
+                livePreviewUrls.addAll(urls);livePreviewHeaders.addAll(requestHeaders);
                 androidx.media3.exoplayer.ExoPlayer player=new androidx.media3.exoplayer.ExoPlayer.Builder(this).build();
                 livePreviewPlayer=player;
                 player.setVolume(0f); // Muted preview; fullscreen playback retains its own sound.

@@ -46,7 +46,7 @@ def persist(state):
     os.replace(temp,STATE_FILE)
 
 def safe_item(item):
-    return {k:v for k,v in item.items() if k not in ("_url","_label","_torrent","_file_index") and
+    return {k:v for k,v in item.items() if k not in ("_url","_label","_torrent","_file_index","_headers") and
             isinstance(v,(str,int,float,bool,list,dict))}
 
 class TelaresPlay:
@@ -134,7 +134,7 @@ class TelaresPlay:
             btn=self.btn(self.nav,label,lambda v=label:self.open_section(v),PANEL,padx=16)
             btn.pack(fill="x",padx=12,pady=4)
             self.nav_buttons[label]=btn
-        self.label(self.nav,"v0.2.11 RC14 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
+        self.label(self.nav,"v0.2.12 RC15 • Telares\nStreaming via VLC",10,MUTED,bg=PANEL).pack(side="bottom",anchor="w",padx=20,pady=25)
         self.right=tk.Frame(self.root,bg=BG)
         self.right.pack(side="left",fill="both",expand=True)
         bar=tk.Frame(self.right,bg=BG,height=78)
@@ -558,7 +558,7 @@ class TelaresPlay:
                 engine.close()
                 if self.playing and self.video is video and self.req==token and self.source_index==index:self.next_source()
             self.job(lambda:engine.open(chosen["_url"],chosen.get("_file_index")),ready,failed)
-        else:self.video.play(chosen["_url"])
+        else:self.video.play(chosen["_url"],chosen.get("_headers"))
 
     def next_source(self):
         if not self.playing:return

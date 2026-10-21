@@ -1,4 +1,5 @@
 #import "ShockStreamChecker.h"
+#import "TelaresHeaderRelay.h"
 
 @interface ShockStreamChecker ()
 @property(nonatomic,strong) NSURLSession *session;
@@ -49,6 +50,8 @@
             cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:6.0];
         [request setValue:@"bytes=0-2047" forHTTPHeaderField:@"Range"];
         [request setValue:@"identity" forHTTPHeaderField:@"Accept-Encoding"];
+        NSDictionary *headers=[TelaresHeaderRelay publicHeaders:item[@"_headers"]?:@{}];
+        for(NSString *name in headers)[request setValue:headers[name] forHTTPHeaderField:name];
         NSURLSessionDataTask *task=[self.session dataTaskWithRequest:request];
         NSNumber *key=@(task.taskIdentifier);
         self.taskItems[key]=item;
@@ -107,7 +110,11 @@
         [next.scheme.lowercaseString isEqualToString:@"http"]);
     if([previous.scheme.lowercaseString isEqualToString:@"https"]&&
        [next.scheme.lowercaseString isEqualToString:@"http"])safe=NO;
-    completionHandler(safe?request:nil);
+    NSMutableURLRequest *nextRequest=[request mutableCopy];
+    NSDictionary *item=self.taskItems[@(task.taskIdentifier)];
+    NSDictionary *headers=[TelaresHeaderRelay publicHeaders:item[@"_headers"]?:@{}];
+    for(NSString *name in headers)[nextRequest setValue:headers[name] forHTTPHeaderField:name];
+    completionHandler(safe?nextRequest:nil);
 }
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)task
     didReceiveData:(NSData *)data {
@@ -184,3 +191,4 @@
     [self.taskItems removeAllObjects];
 }
 @end
+
