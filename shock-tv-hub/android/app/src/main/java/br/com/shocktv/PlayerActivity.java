@@ -408,6 +408,7 @@ public final class PlayerActivity extends Activity {
                 headers.put(header,value);
         }
         if(!headers.isEmpty())http.setDefaultRequestProperties(headers);
+        http.setUserAgent(headers.containsKey("User-Agent")?headers.get("User-Agent"):"Telares/RC15");
         boolean sensitive=headers.containsKey("Authorization")||headers.containsKey("Cookie");
         http.setAllowCrossProtocolRedirects(!sensitive);
         DefaultDataSource.Factory data=new DefaultDataSource.Factory(this,http);

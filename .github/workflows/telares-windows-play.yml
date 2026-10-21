@@ -90,6 +90,7 @@ jobs:
           $env:TELARES_FFMPEG=(Get-ChildItem .fixture-tools/imageio_ffmpeg/binaries/ffmpeg*.exe | Select-Object -First 1).FullName
           python shock-tv-hub/scripts/generate_playback_fixtures.py shock-tv-hub/test-fixtures
       - name: Native torrent and bundled VLC playback smoke test
+        timeout-minutes: 4
         shell: pwsh
         run: python shock-tv-hub/windows/play/self_test.py shock-tv-hub/test-fixtures
       - name: Build standalone Telares Play

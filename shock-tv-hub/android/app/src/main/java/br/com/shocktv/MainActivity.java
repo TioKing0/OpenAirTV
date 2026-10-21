@@ -776,7 +776,7 @@ public final class MainActivity extends Activity {
             if(low.contains(".m3u8"))builder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8);
             java.util.Map<String,String> headers=livePreviewHeaders.get(next);
             androidx.media3.datasource.DefaultHttpDataSource.Factory http=new androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setUserAgent("Telares/RC15").setDefaultRequestProperties(headers).setConnectTimeoutMs(6000).setReadTimeoutMs(12000);
+                .setUserAgent(headers.containsKey("User-Agent")?headers.get("User-Agent"):"Telares/RC15").setDefaultRequestProperties(headers).setConnectTimeoutMs(6000).setReadTimeoutMs(12000);
             androidx.media3.exoplayer.source.DefaultMediaSourceFactory factory=new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
                 new androidx.media3.datasource.DefaultDataSource.Factory(this,http));
             livePreviewPlayer.setMediaSource(factory.createMediaSource(builder.build()));

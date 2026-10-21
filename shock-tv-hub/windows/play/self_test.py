@@ -64,4 +64,7 @@ def run(directory):
         assert not cache.exists(),'Torrent cache not removed'
     return 0
 
-if __name__=='__main__':sys.exit(run(sys.argv[1]))
+if __name__=='__main__':
+    import faulthandler
+    faulthandler.dump_traceback_later(60,repeat=True)
+    sys.exit(run(sys.argv[1]))
